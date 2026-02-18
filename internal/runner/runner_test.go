@@ -29,7 +29,7 @@ func TestCapture_ScriptStdout(t *testing.T) {
 	tmpdir := t.TempDir()
 	script := writeScript(t, tmpdir, "hello.sh", "#!/bin/bash\necho hello")
 
-	out, err := capture("script", script, nil, nil)
+	out, err := capture("/bin/sh", script, nil, nil)
 	if err != nil {
 		t.Fatalf("capture() error: %v", err)
 	}
@@ -38,8 +38,11 @@ func TestCapture_ScriptStdout(t *testing.T) {
 	}
 }
 
-func TestCapture_ExecutableBinary(t *testing.T) {
-	out, err := capture("executable", "/bin/echo", []string{"world"}, nil)
+func TestCapture_CustomExecutable(t *testing.T) {
+	tmpdir := t.TempDir()
+	script := writeScript(t, tmpdir, "hello2.sh", "#!/bin/bash\necho world")
+
+	out, err := capture("/bin/sh", script, nil, nil)
 	if err != nil {
 		t.Fatalf("capture() error: %v", err)
 	}
@@ -52,7 +55,7 @@ func TestCapture_ExitCodeError(t *testing.T) {
 	tmpdir := t.TempDir()
 	script := writeScript(t, tmpdir, "fail.sh", "#!/bin/bash\nexit 2")
 
-	_, err := capture("script", script, nil, nil)
+	_, err := capture("/bin/sh", script, nil, nil)
 	if err == nil {
 		t.Fatal("capture() should return error for non-zero exit")
 	}
@@ -66,7 +69,7 @@ func TestCapture_ExitCodeError(t *testing.T) {
 }
 
 func TestCapture_NonexistentScript(t *testing.T) {
-	_, err := capture("script", "/nonexistent/path/script.sh", nil, nil)
+	_, err := capture("/bin/sh", "/nonexistent/path/script.sh", nil, nil)
 	if err == nil {
 		t.Error("capture() should return error for nonexistent script")
 	}
@@ -77,7 +80,7 @@ func TestCapture_InjectsExtraEnv(t *testing.T) {
 	script := writeScript(t, tmpdir, "env.sh", "#!/bin/bash\necho COLUMNS=$COLUMNS")
 	extraEnv := []string{"TERM=xterm-256color", "COLUMNS=42"}
 
-	out, err := capture("script", script, nil, extraEnv)
+	out, err := capture("/bin/sh", script, nil, extraEnv)
 	if err != nil {
 		t.Fatalf("capture() error: %v", err)
 	}
@@ -91,7 +94,7 @@ func TestCapture_Width80(t *testing.T) {
 	script := writeScript(t, tmpdir, "cols.sh", "#!/bin/bash\necho COLUMNS=$COLUMNS")
 	extraEnv := []string{"TERM=xterm-256color", "COLUMNS=80"}
 
-	out, err := capture("script", script, nil, extraEnv)
+	out, err := capture("/bin/sh", script, nil, extraEnv)
 	if err != nil {
 		t.Fatalf("capture() error: %v", err)
 	}
@@ -104,7 +107,7 @@ func TestCapture_ScriptStderr(t *testing.T) {
 	tmpdir := t.TempDir()
 	script := writeScript(t, tmpdir, "stderr.sh", "#!/bin/bash\necho err >&2\nexit 1")
 
-	out, err := capture("script", script, nil, nil)
+	out, err := capture("/bin/sh", script, nil, nil)
 	if err == nil {
 		t.Error("expected error from non-zero exit")
 	}

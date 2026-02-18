@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shotgum/stg/internal/config"
-	"github.com/shotgum/stg/internal/registry"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/config"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/registry"
 )
 
 // makeReg creates a minimal registry via Load() with an empty home dir.
@@ -31,13 +31,13 @@ func makeReg(t *testing.T) *registry.Registry {
 	return reg
 }
 
-func makeAbsEntry(path, typ string) registry.ScriptEntry {
+func makeAbsEntry(path, executable string) registry.ScriptEntry {
 	return registry.ScriptEntry{
 		Script: config.Script{
-			Name:     "test",
-			Category: "dev",
-			Type:     typ,
-			Path:     path,
+			Name:       "test",
+			Category:   "dev",
+			Executable: executable,
+			Path:       path,
 		},
 		Source: "global",
 	}
@@ -48,7 +48,7 @@ func TestCaptureRun_Script(t *testing.T) {
 	tmpdir := t.TempDir()
 	script := writeScript(t, tmpdir, "hello.sh", "#!/bin/bash\necho capturerun-ok")
 
-	entry := makeAbsEntry(script, "script")
+	entry := makeAbsEntry(script, "/bin/sh")
 	out, err := CaptureRun(entry, nil, reg)
 	if err != nil {
 		t.Fatalf("CaptureRun() error: %v", err)
@@ -58,10 +58,13 @@ func TestCaptureRun_Script(t *testing.T) {
 	}
 }
 
-func TestCaptureRun_Executable(t *testing.T) {
+func TestCaptureRun_CustomExecutable(t *testing.T) {
 	reg := makeReg(t)
-	entry := makeAbsEntry("/bin/echo", "executable")
-	out, err := CaptureRun(entry, []string{"capturerun-exec"}, reg)
+	tmpdir := t.TempDir()
+	script := writeScript(t, tmpdir, "echo.sh", "#!/bin/bash\necho capturerun-exec")
+
+	entry := makeAbsEntry(script, "/bin/sh")
+	out, err := CaptureRun(entry, nil, reg)
 	if err != nil {
 		t.Fatalf("CaptureRun() error: %v", err)
 	}
@@ -75,7 +78,7 @@ func TestCaptureRun_ExitError(t *testing.T) {
 	tmpdir := t.TempDir()
 	script := writeScript(t, tmpdir, "fail.sh", "#!/bin/bash\necho partial\nexit 3")
 
-	entry := makeAbsEntry(script, "script")
+	entry := makeAbsEntry(script, "/bin/sh")
 	out, err := CaptureRun(entry, nil, reg)
 	if err == nil {
 		t.Error("CaptureRun() should return error for non-zero exit")
@@ -88,7 +91,7 @@ func TestCaptureRunForPreview_SetsColumns(t *testing.T) {
 	tmpdir := t.TempDir()
 	script := writeScript(t, tmpdir, "cols.sh", "#!/bin/bash\necho COLUMNS=$COLUMNS")
 
-	entry := makeAbsEntry(script, "script")
+	entry := makeAbsEntry(script, "/bin/sh")
 	out, err := CaptureRunForPreview(entry, nil, reg, 77)
 	if err != nil {
 		t.Fatalf("CaptureRunForPreview() error: %v", err)
@@ -103,7 +106,7 @@ func TestCaptureRunForPreview_SetsTERM(t *testing.T) {
 	tmpdir := t.TempDir()
 	script := writeScript(t, tmpdir, "term.sh", "#!/bin/bash\necho TERM=$TERM")
 
-	entry := makeAbsEntry(script, "script")
+	entry := makeAbsEntry(script, "/bin/sh")
 	out, err := CaptureRunForPreview(entry, nil, reg, 80)
 	if err != nil {
 		t.Fatalf("CaptureRunForPreview() error: %v", err)

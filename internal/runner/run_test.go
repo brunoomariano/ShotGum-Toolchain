@@ -7,8 +7,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/shotgum/stg/internal/config"
-	"github.com/shotgum/stg/internal/registry"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/config"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/registry"
 )
 
 // captureTerminalOutput redirects os.Stdout and os.Stderr during f(), returning
@@ -28,13 +28,13 @@ func captureTerminalOutput(f func()) string {
 	return buf.String()
 }
 
-func makeRunEntry(path, typ string) registry.ScriptEntry {
+func makeRunEntry(path, executable string) registry.ScriptEntry {
 	return registry.ScriptEntry{
 		Script: config.Script{
-			Name:     "test",
-			Category: "dev",
-			Type:     typ,
-			Path:     path,
+			Name:       "test",
+			Category:   "dev",
+			Executable: executable,
+			Path:       path,
 		},
 		Source: "global",
 	}
@@ -47,7 +47,7 @@ func TestRun_Script_Success(t *testing.T) {
 	script := writeScript(t, tmpdir, "run.sh", "#!/bin/bash\necho run-success")
 
 	captureTerminalOutput(func() {
-		err := run("script", script, nil)
+		err := run("/bin/sh", script, nil)
 		if err != nil {
 			t.Errorf("run() error: %v", err)
 		}
@@ -55,8 +55,11 @@ func TestRun_Script_Success(t *testing.T) {
 }
 
 func TestRun_Executable_Success(t *testing.T) {
+	tmpdir := t.TempDir()
+	script := writeScript(t, tmpdir, "echo.sh", "#!/bin/bash\necho run-exec-ok")
+
 	captureTerminalOutput(func() {
-		err := run("executable", "/bin/echo", []string{"run-exec-ok"})
+		err := run("/bin/sh", script, nil)
 		if err != nil {
 			t.Errorf("run() error: %v", err)
 		}
@@ -69,7 +72,7 @@ func TestRun_Script_ExitError(t *testing.T) {
 
 	var runErr *RunError
 	captureTerminalOutput(func() {
-		err := run("script", script, nil)
+		err := run("/bin/sh", script, nil)
 		if err == nil {
 			t.Error("run() should return error for non-zero exit")
 			return
@@ -85,7 +88,7 @@ func TestRun_Script_ExitError(t *testing.T) {
 
 func TestRun_Script_NotFound(t *testing.T) {
 	captureTerminalOutput(func() {
-		err := run("script", "/nonexistent/script.sh", nil)
+		err := run("/bin/sh", "/nonexistent/script.sh", nil)
 		if err == nil {
 			t.Error("run() should return error for nonexistent script")
 		}
@@ -99,7 +102,7 @@ func TestRun_ViaPublicFunction(t *testing.T) {
 	tmpdir := t.TempDir()
 	script := writeScript(t, tmpdir, "run2.sh", "#!/bin/bash\necho run-via-public")
 
-	entry := makeRunEntry(script, "script")
+	entry := makeRunEntry(script, "/bin/sh")
 	captureTerminalOutput(func() {
 		err := Run(entry, nil, reg)
 		if err != nil {
@@ -116,7 +119,7 @@ func TestRunHelp(t *testing.T) {
 	// Script that prints a message when given --help
 	script := writeScript(t, tmpdir, "help.sh", "#!/bin/bash\nif [ \"$1\" = \"--help\" ]; then echo 'help text'; fi")
 
-	entry := makeRunEntry(script, "script")
+	entry := makeRunEntry(script, "/bin/sh")
 	captureTerminalOutput(func() {
 		err := RunHelp(entry, reg)
 		if err != nil {
