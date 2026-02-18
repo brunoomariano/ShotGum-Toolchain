@@ -1,3 +1,6 @@
+// Package config handles loading, validating, and persisting ShotGum
+// configuration files. Global config lives at ~/.config/shotgum/config.yaml;
+// local config is discovered by walking up from the working directory.
 package config
 
 import (
@@ -26,7 +29,7 @@ func defaultScriptsHome() string {
 	return filepath.Join(home, defaultScriptsDir)
 }
 
-// expandPath expands ~ and environment variables in a path.
+// expandPath expands ~ and environment variables in a single path string.
 func expandPath(path string) string {
 	if path == "" {
 		return path
@@ -36,6 +39,19 @@ func expandPath(path string) string {
 		path = filepath.Join(home, path[2:])
 	}
 	return os.ExpandEnv(path)
+}
+
+// expandPaths expands ~ and env vars in all path fields of cfg in-place.
+func expandPaths(cfg *Config) {
+	cfg.ScriptsHome = expandPath(cfg.ScriptsHome)
+	cfg.DefaultExec = expandPath(cfg.DefaultExec)
+	for i := range cfg.Categories {
+		cfg.Categories[i].ScriptsPath = expandPath(cfg.Categories[i].ScriptsPath)
+	}
+	for i := range cfg.Scripts {
+		cfg.Scripts[i].Path = expandPath(cfg.Scripts[i].Path)
+		cfg.Scripts[i].Executable = expandPath(cfg.Scripts[i].Executable)
+	}
 }
 
 // LoadGlobal reads ~/.config/shotgum/config.yaml.
@@ -54,13 +70,7 @@ func LoadGlobal() (*Config, error) {
 		return nil, fmt.Errorf("parsing global config: %w", err)
 	}
 	cfg.Source = "global"
-	cfg.ScriptsHome = expandPath(cfg.ScriptsHome)
-	for i := range cfg.Categories {
-		cfg.Categories[i].ScriptsPath = expandPath(cfg.Categories[i].ScriptsPath)
-	}
-	for i := range cfg.Scripts {
-		cfg.Scripts[i].Path = expandPath(cfg.Scripts[i].Path)
-	}
+	expandPaths(&cfg)
 	return &cfg, nil
 }
 
@@ -81,13 +91,7 @@ func LoadLocal() (*Config, error) {
 				return nil, fmt.Errorf("parsing local config %s: %w", candidate, err)
 			}
 			cfg.Source = "local"
-			cfg.ScriptsHome = expandPath(cfg.ScriptsHome)
-			for i := range cfg.Categories {
-				cfg.Categories[i].ScriptsPath = expandPath(cfg.Categories[i].ScriptsPath)
-			}
-			for i := range cfg.Scripts {
-				cfg.Scripts[i].Path = expandPath(cfg.Scripts[i].Path)
-			}
+			expandPaths(&cfg)
 			return &cfg, nil
 		}
 		if !os.IsNotExist(err) {
@@ -127,6 +131,7 @@ func EnsureDefault() error {
 			Version:     "1",
 			ScriptsHome: "~/" + defaultScriptsDir,
 			HelpFlag:    "--help",
+			DefaultExec: "/bin/sh",
 		}
 		if err := Save(cfg, cfgPath); err != nil {
 			return err
