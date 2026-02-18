@@ -3,7 +3,7 @@ package registry
 import (
 	"testing"
 
-	"github.com/shotgum/stg/internal/config"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/config"
 )
 
 func makeRegistry(global, local *config.Config) *Registry {
@@ -29,7 +29,7 @@ func TestGetCategories_GlobalOnly(t *testing.T) {
 	if len(cats) != 1 {
 		t.Fatalf("expected 1 category, got %d", len(cats))
 	}
-	if cats[0].Name != "tools" || cats[0].Source != "global" {
+	if cats[0].Name != "tools" || cats[0].Source != "user" {
 		t.Errorf("unexpected category: %+v", cats[0])
 	}
 }
@@ -70,15 +70,15 @@ func TestGetCategories_MergeLocalOverride(t *testing.T) {
 	if cats[0].Name != "shared" || cats[0].Source != "local" {
 		t.Errorf("first category should be local shared, got %+v", cats[0])
 	}
-	if cats[1].Name != "global-only" || cats[1].Source != "global" {
-		t.Errorf("second category should be global-only, got %+v", cats[1])
+	if cats[1].Name != "global-only" || cats[1].Source != "user" {
+		t.Errorf("second category should be user-only, got %+v", cats[1])
 	}
 }
 
 func TestGetScripts_NonexistentCategory(t *testing.T) {
 	global := &config.Config{
 		Scripts: []config.Script{
-			{Name: "build", Category: "tools", Type: "script"},
+			{Name: "build", Category: "tools", Executable: "/bin/sh"},
 		},
 	}
 	reg := makeRegistry(global, nil)
@@ -91,13 +91,13 @@ func TestGetScripts_NonexistentCategory(t *testing.T) {
 func TestGetScripts_MergeLocalOverride(t *testing.T) {
 	global := &config.Config{
 		Scripts: []config.Script{
-			{Name: "build", Category: "tools", Type: "script", Description: "global build"},
-			{Name: "test", Category: "tools", Type: "script"},
+			{Name: "build", Category: "tools", Executable: "/bin/sh", Description: "global build"},
+			{Name: "test", Category: "tools", Executable: "/bin/sh"},
 		},
 	}
 	local := &config.Config{
 		Scripts: []config.Script{
-			{Name: "build", Category: "tools", Type: "script", Description: "local build"},
+			{Name: "build", Category: "tools", Executable: "/bin/sh", Description: "local build"},
 		},
 	}
 	reg := makeRegistry(global, local)
@@ -108,15 +108,15 @@ func TestGetScripts_MergeLocalOverride(t *testing.T) {
 	if scripts[0].Name != "build" || scripts[0].Source != "local" {
 		t.Errorf("first script should be local build, got %+v", scripts[0])
 	}
-	if scripts[1].Name != "test" || scripts[1].Source != "global" {
-		t.Errorf("second script should be global test, got %+v", scripts[1])
+	if scripts[1].Name != "test" || scripts[1].Source != "user" {
+		t.Errorf("second script should be user test, got %+v", scripts[1])
 	}
 }
 
 func TestFindScript_Local(t *testing.T) {
 	local := &config.Config{
 		Scripts: []config.Script{
-			{Name: "deploy", Category: "ops", Type: "script"},
+			{Name: "deploy", Category: "ops", Executable: "/bin/sh"},
 		},
 	}
 	reg := makeRegistry(nil, local)
@@ -132,7 +132,7 @@ func TestFindScript_Local(t *testing.T) {
 func TestFindScript_Global(t *testing.T) {
 	global := &config.Config{
 		Scripts: []config.Script{
-			{Name: "lint", Category: "dev", Type: "script"},
+			{Name: "lint", Category: "dev", Executable: "/bin/sh"},
 		},
 	}
 	reg := makeRegistry(global, nil)
@@ -140,8 +140,8 @@ func TestFindScript_Global(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if entry.Source != "global" {
-		t.Errorf("expected source=global, got %q", entry.Source)
+	if entry.Source != "user" {
+		t.Errorf("expected source=user, got %q", entry.Source)
 	}
 }
 
@@ -160,7 +160,6 @@ func TestResolveScriptPath_AbsolutePath(t *testing.T) {
 			Name:     "test",
 			Category: "dev",
 			Path:     "/absolute/path/to/script.sh",
-			Type:     "script",
 		},
 		Source: "global",
 	}
@@ -182,7 +181,6 @@ func TestResolveScriptPath_RelativeWithCategoryScriptsPath(t *testing.T) {
 			Name:     "build",
 			Category: "dev",
 			Path:     "build.sh",
-			Type:     "script",
 		},
 		Source: "global",
 	}
@@ -202,7 +200,6 @@ func TestResolveScriptPath_RelativeWithScriptsHome(t *testing.T) {
 			Name:     "build",
 			Category: "dev",
 			Path:     "build.sh",
-			Type:     "script",
 		},
 		Source: "global",
 	}

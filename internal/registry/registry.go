@@ -1,22 +1,27 @@
+// Package registry merges the global and local ShotGum configurations into a
+// single unified view. Local entries always take precedence over global ones of
+// the same name. The registry also resolves script paths, executables, and help
+// flags according to the configured cascade rules.
 package registry
 
 import (
 	"fmt"
+	"os/exec"
 	"path/filepath"
 
-	"github.com/shotgum/stg/internal/config"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/config"
 )
 
-// CategoryEntry is a category with its source (global/local).
+// CategoryEntry is a category with its source (user/local).
 type CategoryEntry struct {
 	config.Category
-	Source string // "global" | "local"
+	Source string // "user" | "local"
 }
 
 // ScriptEntry is a script with its source and resolved paths.
 type ScriptEntry struct {
 	config.Script
-	Source string // "global" | "local"
+	Source string // "user" | "local"
 }
 
 // Registry holds the merged view of global and local configs.
@@ -54,7 +59,7 @@ func (r *Registry) GetCategories() []CategoryEntry {
 	if r.global != nil {
 		for _, c := range r.global.Categories {
 			if !seen[c.Name] {
-				result = append(result, CategoryEntry{Category: c, Source: "global"})
+				result = append(result, CategoryEntry{Category: c, Source: "user"})
 			}
 		}
 	}
@@ -79,7 +84,7 @@ func (r *Registry) GetScripts(category string) []ScriptEntry {
 	if r.global != nil {
 		for _, s := range r.global.Scripts {
 			if s.Category == category && !seen[s.Name] {
-				result = append(result, ScriptEntry{Script: s, Source: "global"})
+				result = append(result, ScriptEntry{Script: s, Source: "user"})
 			}
 		}
 	}
@@ -132,6 +137,22 @@ func (r *Registry) ResolveHelpFlag(entry ScriptEntry) string {
 	return "--help"
 }
 
+// ResolveExecutable returns the effective executable for a script:
+// script.executable -> config.default_executable (same source) ->
+// global.default_executable -> /bin/sh.
+func (r *Registry) ResolveExecutable(entry ScriptEntry) string {
+	if entry.Executable != "" {
+		return resolveExecutablePath(entry.Executable)
+	}
+	if cfg := r.configFor(entry.Source); cfg != nil && cfg.DefaultExec != "" {
+		return resolveExecutablePath(cfg.DefaultExec)
+	}
+	if r.global != nil && r.global.DefaultExec != "" {
+		return resolveExecutablePath(r.global.DefaultExec)
+	}
+	return "/bin/sh"
+}
+
 // GlobalConfig returns the global config (may be nil if not found).
 func (r *Registry) GlobalConfig() *config.Config {
 	return r.global
@@ -171,4 +192,17 @@ func (r *Registry) scriptsHome(source string) string {
 		return r.global.ScriptsHome
 	}
 	return ""
+}
+
+func resolveExecutablePath(executable string) string {
+	if executable == "" {
+		return "/bin/sh"
+	}
+	if filepath.IsAbs(executable) {
+		return executable
+	}
+	if resolved, err := exec.LookPath(executable); err == nil {
+		return resolved
+	}
+	return executable
 }

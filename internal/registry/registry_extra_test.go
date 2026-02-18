@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/shotgum/stg/internal/config"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/config"
 )
 
 func TestLoad_EmptyHome(t *testing.T) {
@@ -70,7 +70,6 @@ func TestScriptsHome_FallbackToGlobal(t *testing.T) {
 			Name:     "build",
 			Category: "dev",
 			Path:     "build.sh",
-			Type:     "script",
 		},
 		Source: "local",
 	}
