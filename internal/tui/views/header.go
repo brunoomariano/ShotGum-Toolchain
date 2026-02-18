@@ -3,9 +3,9 @@ package views
 import (
 	"strings"
 
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/tui/styles"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/shotgum/stg/internal/tui/styles"
 )
 
 // Bubble cluster: four circles of ascending size, suggesting floating soap/gum bubbles.

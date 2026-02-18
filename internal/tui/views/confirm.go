@@ -4,11 +4,12 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/registry"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/tui/styles"
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/shotgum/stg/internal/registry"
-	"github.com/shotgum/stg/internal/tui/styles"
 )
 
 // ConfirmRunMsg is emitted when the user confirms script execution.
@@ -28,10 +29,13 @@ type ConfirmModel struct {
 	height       int
 	argsInput    textinput.Model
 	inputActive  bool
+	helpText     string
+	helpVp       viewport.Model
 }
 
 // NewConfirmModel creates a new confirmation dialog for a script.
-func NewConfirmModel(entry registry.ScriptEntry, reg *registry.Registry, w, h int) ConfirmModel {
+// helpText is the pre-loaded --help output for the script (may be empty).
+func NewConfirmModel(entry registry.ScriptEntry, reg *registry.Registry, w, h int, helpText string) ConfirmModel {
 	path := ""
 	if reg != nil {
 		path = reg.ResolveScriptPath(entry)
@@ -43,13 +47,27 @@ func NewConfirmModel(entry registry.ScriptEntry, reg *registry.Registry, w, h in
 	ti.PromptStyle = lipgloss.NewStyle().Foreground(styles.Purple)
 	ti.TextStyle = lipgloss.NewStyle().Foreground(styles.White)
 
+	vp := viewport.New(0, 0)
+	if helpText != "" {
+		vp.SetContent(helpText)
+	}
+
 	return ConfirmModel{
 		entry:        entry,
 		resolvedPath: path,
 		width:        w,
 		height:       h,
 		argsInput:    ti,
+		helpText:     helpText,
+		helpVp:       vp,
 	}
+}
+
+// SetHelpText updates the cached help text (called when async load completes).
+func (m *ConfirmModel) SetHelpText(text string) {
+	m.helpText = text
+	m.helpVp.SetContent(text)
+	m.helpVp.GotoTop()
 }
 
 func (m ConfirmModel) Update(msg tea.Msg) (ConfirmModel, tea.Cmd) {
@@ -68,6 +86,11 @@ func (m ConfirmModel) Update(msg tea.Msg) (ConfirmModel, tea.Cmd) {
 				m.inputActive = false
 				m.argsInput.Blur()
 				return m, nil
+			case "up", "down", "pgup", "pgdown":
+				// Scroll the help viewport while typing
+				var cmd tea.Cmd
+				m.helpVp, cmd = m.helpVp.Update(msg)
+				return m, cmd
 			}
 			var cmd tea.Cmd
 			m.argsInput, cmd = m.argsInput.Update(msg)
@@ -127,7 +150,7 @@ func (m ConfirmModel) View() string {
 	// Key hints
 	var hint string
 	if m.inputActive {
-		hint = styles.HelpStyle.Render("[Enter] Run with args  •  [Esc] Back")
+		hint = styles.HelpStyle.Render("[Enter] Run with args  •  [Esc] Back  •  [↑/↓] Scroll help")
 	} else {
 		hint = styles.HelpStyle.Render("[Enter] Run  •  [a] Add args  •  [Esc] Cancel")
 	}
@@ -138,5 +161,49 @@ func (m ConfirmModel) View() string {
 	if m.width == 0 || m.height == 0 {
 		return box
 	}
+
+	// When inputActive, render a help panel below the dialog.
+	if m.inputActive {
+		helpPanel := m.renderHelpPanel(boxWidth)
+		combined := lipgloss.JoinVertical(lipgloss.Left, box, helpPanel)
+		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, combined)
+	}
+
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
+}
+
+// renderHelpPanel builds the help container shown below the confirm dialog.
+func (m ConfirmModel) renderHelpPanel(width int) string {
+	panelStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(styles.Teal).
+		Padding(0, 1)
+
+	// Estimate dialog height: ~10 lines content + 2 border + 2 padding = 14
+	const dialogH = 14
+	helpH := m.height - dialogH - 6
+	if helpH < 3 {
+		helpH = 3
+	}
+
+	var content string
+	if m.helpText == "" {
+		content = styles.DescStyle.Render("  loading help…")
+	} else {
+		m.helpVp.Width = width - 2
+		m.helpVp.Height = helpH
+
+		scrollInfo := ""
+		if m.helpVp.TotalLineCount() > m.helpVp.Height {
+			pct := int(m.helpVp.ScrollPercent() * 100)
+			scrollInfo = "  " + styles.StatusStyle.Render(fmt.Sprintf("%d%%", pct))
+		}
+		content = m.helpVp.View() + scrollInfo
+	}
+
+	title := styles.TitleStyle.Render("Script help")
+	sep := styles.DescStyle.Render(strings.Repeat("─", width-4))
+	inner := title + "\n" + sep + "\n" + content
+
+	return panelStyle.Width(width).Render(inner)
 }

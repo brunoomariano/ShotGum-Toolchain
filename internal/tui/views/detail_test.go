@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/config"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/registry"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/shotgum/stg/internal/config"
-	"github.com/shotgum/stg/internal/registry"
 )
 
 func makeDetailScriptEntry(name, category string) *registry.ScriptEntry {
@@ -16,7 +16,6 @@ func makeDetailScriptEntry(name, category string) *registry.ScriptEntry {
 		Script: config.Script{
 			Name:     name,
 			Category: category,
-			Type:     "script",
 			Path:     "/test/path/" + name + ".sh",
 		},
 		Source: "global",
@@ -118,7 +117,7 @@ func TestDetailModel_SetSize_Resize(t *testing.T) {
 
 func TestDetailModel_View_None(t *testing.T) {
 	var d DetailModel // detailNone mode
-	view := d.View(80, 24)
+	view := d.View(80)
 	if !strings.Contains(stripANSI(view), "Select an item") {
 		t.Errorf("View() in detailNone should contain 'Select an item': %q", stripANSI(view))
 	}
@@ -129,7 +128,7 @@ func TestDetailModel_View_Category(t *testing.T) {
 	d.SetSize(80, 24)
 	cat := makeDetailCategoryEntry("mycat")
 	d.SetCategory(cat, nil, nil)
-	view := d.View(80, 24)
+	view := d.View(80)
 	if !strings.Contains(stripANSI(view), "mycat") {
 		t.Errorf("View() in category mode should contain category name: %q", stripANSI(view))
 	}
@@ -140,7 +139,7 @@ func TestDetailModel_View_Script_Basic(t *testing.T) {
 	d.SetSize(80, 24)
 	scr := makeDetailScriptEntry("myscript", "mycat")
 	d.SetScript(scr, nil)
-	view := d.View(80, 24)
+	view := d.View(80)
 	stripped := stripANSI(view)
 	if !strings.Contains(stripped, "myscript") {
 		t.Errorf("View() should contain script name: %q", stripped)
@@ -152,7 +151,7 @@ func TestDetailModel_View_Script_LoadingHelp(t *testing.T) {
 	d.SetSize(80, 24)
 	scr := makeDetailScriptEntry("myscript", "mycat")
 	d.SetScript(scr, nil)
-	view := d.View(80, 24)
+	view := d.View(80)
 	stripped := stripANSI(view)
 	// helpScript == "" after SetScript → shows "loading help…"
 	if !strings.Contains(stripped, "loading help") {
@@ -166,7 +165,7 @@ func TestDetailModel_View_Script_WithHelp(t *testing.T) {
 	scr := makeDetailScriptEntry("myscript", "mycat")
 	d.SetScript(scr, nil)
 	d.SetHelpText("myscript", "Usage: myscript [options]")
-	view := d.View(80, 30)
+	view := d.View(80)
 	stripped := stripANSI(view)
 	if !strings.Contains(stripped, "Help") {
 		t.Errorf("View() with helpText should contain 'Help': %q", stripped)
@@ -178,7 +177,7 @@ func TestDetailModel_View_Script_HelpFlag(t *testing.T) {
 	d.SetSize(80, 24)
 	scr := makeDetailScriptEntry("myscript", "mycat")
 	d.SetScript(scr, nil)
-	view := d.View(80, 24)
+	view := d.View(80)
 	stripped := stripANSI(view)
 	// With nil registry, helpFlag defaults to "--help" in renderScript
 	if !strings.Contains(stripped, "--help") {
@@ -200,12 +199,12 @@ func TestDetailModel_View_Category_WithScripts(t *testing.T) {
 	cat := makeDetailCategoryEntry("mycat")
 	scripts := []registry.ScriptEntry{
 		{
-			Script: config.Script{Name: "build", Type: "script"},
+			Script: config.Script{Name: "build", Executable: "/bin/sh"},
 			Source: "global",
 		},
 	}
 	d.SetCategory(cat, scripts, nil)
-	view := d.View(80, 24)
+	view := d.View(80)
 	stripped := stripANSI(view)
 	if !strings.Contains(stripped, "mycat") {
 		t.Errorf("View() category with scripts should contain category name: %q", stripped)
@@ -217,7 +216,7 @@ func TestDetailModel_View_Category_WithScripts(t *testing.T) {
 func TestDetailModel_renderCategory_NilCatEntry(t *testing.T) {
 	var d DetailModel
 	d.mode = detailCategory // catEntry remains nil
-	view := d.View(80, 24)
+	view := d.View(80)
 	if view != "" {
 		t.Errorf("renderCategory with nil catEntry should return empty string, got %q", view)
 	}
@@ -228,7 +227,7 @@ func TestDetailModel_renderCategory_NilCatEntry(t *testing.T) {
 func TestDetailModel_renderScript_NilScrEntry(t *testing.T) {
 	var d DetailModel
 	d.mode = detailScript // scrEntry remains nil
-	view := d.View(80, 24)
+	view := d.View(80)
 	if view != "" {
 		t.Errorf("renderScript with nil scrEntry should return empty string, got %q", view)
 	}
@@ -259,7 +258,7 @@ func TestDetailModel_View_Script_WithHelp_ScrollIndicator(t *testing.T) {
 	// 40 lines exceeds vpH=6, so TotalLineCount > Height → scrollInfo is shown
 	longHelp := strings.Repeat("Usage: myscript --flag value\n", 40)
 	d.SetHelpText("myscript", longHelp)
-	view := d.View(80, 20)
+	view := d.View(80)
 	if view == "" {
 		t.Error("View() with long help should not be empty")
 	}
@@ -281,7 +280,7 @@ func TestLoadScriptHelpCmd_ReturnsDetailHelpMsg(t *testing.T) {
 	config.Save(&config.Config{
 		Version:    "1",
 		Categories: []config.Category{{Name: "tools"}},
-		Scripts:    []config.Script{{Name: "helper", Category: "tools", Type: "script", Path: scriptPath}},
+		Scripts:    []config.Script{{Name: "helper", Category: "tools", Executable: "/bin/sh", Path: scriptPath}},
 	}, config.GlobalConfigPath())
 
 	reg, err := registry.Load()

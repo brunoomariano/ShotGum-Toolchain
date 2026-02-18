@@ -4,47 +4,29 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/config"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/registry"
 	"github.com/charmbracelet/bubbles/list"
-	"github.com/shotgum/stg/internal/config"
-	"github.com/shotgum/stg/internal/registry"
 )
 
-func makeScriptEntry(name, desc, typ, source string) registry.ScriptEntry {
+func makeScriptEntry(name, desc, source string) registry.ScriptEntry {
 	return registry.ScriptEntry{
-		Script: config.Script{Name: name, Description: desc, Type: typ, Category: "testcat"},
+		Script: config.Script{Name: name, Description: desc, Category: "testcat"},
 		Source: source,
 	}
 }
 
-func TestScriptItem_Title_Script(t *testing.T) {
-	entry := makeScriptEntry("build", "Build project", "script", "local")
+func TestScriptItem_Title(t *testing.T) {
+	entry := makeScriptEntry("build", "Build project", "local")
 	item := ScriptItem{entry: entry}
 	title := item.Title()
 	if !strings.Contains(title, "build") {
 		t.Errorf("Title() = %q, want it to contain 'build'", title)
 	}
-	if !strings.Contains(title, "[local]") {
-		t.Errorf("Title() = %q, want it to contain '[local]'", title)
-	}
-	if !strings.Contains(title, "[sh]") {
-		t.Errorf("Title() = %q, want it to contain '[sh]'", title)
-	}
-}
-
-func TestScriptItem_Title_Executable(t *testing.T) {
-	entry := makeScriptEntry("mybin", "A binary", "executable", "global")
-	item := ScriptItem{entry: entry}
-	title := item.Title()
-	if !strings.Contains(title, "[bin]") {
-		t.Errorf("Title() = %q, want it to contain '[bin]'", title)
-	}
-	if !strings.Contains(title, "[global]") {
-		t.Errorf("Title() = %q, want it to contain '[global]'", title)
-	}
 }
 
 func TestScriptItem_Description(t *testing.T) {
-	entry := makeScriptEntry("test", "Run tests", "script", "global")
+	entry := makeScriptEntry("test", "Run tests", "user")
 	item := ScriptItem{entry: entry}
 	desc := item.Description()
 	if !strings.Contains(desc, "Run tests") {
@@ -53,7 +35,7 @@ func TestScriptItem_Description(t *testing.T) {
 }
 
 func TestScriptItem_FilterValue(t *testing.T) {
-	entry := makeScriptEntry("deploy", "Deploy app", "script", "local")
+	entry := makeScriptEntry("deploy", "Deploy app", "local")
 	item := ScriptItem{entry: entry}
 	if got := item.FilterValue(); got != "deploy" {
 		t.Errorf("FilterValue() = %q, want 'deploy'", got)
@@ -61,22 +43,23 @@ func TestScriptItem_FilterValue(t *testing.T) {
 }
 
 func TestScriptItem_Entry(t *testing.T) {
-	entry := makeScriptEntry("lint", "Lint code", "script", "global")
+	entry := makeScriptEntry("lint", "Lint code", "user")
 	item := ScriptItem{entry: entry}
 	got := item.Entry()
-	if got.Name != "lint" || got.Source != "global" {
+	if got.Name != "lint" || got.Source != "user" {
 		t.Errorf("Entry() = %+v, unexpected", got)
 	}
 }
 
 func TestNewScriptList_WithItems(t *testing.T) {
 	entries := []registry.ScriptEntry{
-		makeScriptEntry("build", "Build", "script", "global"),
-		makeScriptEntry("test", "Test", "script", "local"),
+		makeScriptEntry("build", "Build", "user"),
+		makeScriptEntry("test", "Test", "local"),
 	}
 	l := NewScriptList("mycat", entries, 80, 24)
-	if len(l.Items()) != 2 {
-		t.Errorf("expected 2 items, got %d", len(l.Items()))
+	// 2 real entries + 2 section headers ("User" and "Local")
+	if len(l.Items()) != 4 {
+		t.Errorf("expected 4 items (2 entries + 2 section headers), got %d", len(l.Items()))
 	}
 }
 
@@ -88,8 +71,8 @@ func TestNewScriptList_Empty(t *testing.T) {
 
 func TestNewScriptList_View_TriggersRender(t *testing.T) {
 	entries := []registry.ScriptEntry{
-		makeScriptEntry("build", "Build", "script", "global"),
-		makeScriptEntry("mybin", "A bin", "executable", "local"),
+		makeScriptEntry("build", "Build", "user"),
+		makeScriptEntry("mybin", "A bin", "local"),
 	}
 	l := NewScriptList("mycat", entries, 80, 24)
 	// View() calls the delegate's Render method internally
@@ -108,7 +91,7 @@ func TestScriptDelegate_Update_ReturnsNil(t *testing.T) {
 }
 
 // TestScriptDelegate_Render_InvalidItem verifies that Render exits early and writes
-// nothing when the list.Item cannot be type-asserted to ScriptItem.
+// nothing when the list.Item cannot be type-asserted to ScriptItem or SectionHeaderItem.
 func TestScriptDelegate_Render_InvalidItem(t *testing.T) {
 	d := scriptDelegate{}
 	var buf strings.Builder

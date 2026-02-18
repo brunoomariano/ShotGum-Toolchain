@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/config"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/registry"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/shotgum/stg/internal/config"
-	"github.com/shotgum/stg/internal/registry"
 )
 
 func TestNewOutputModel_LoadingTrue(t *testing.T) {
@@ -152,7 +152,7 @@ func TestRunScriptCmd_ReturnsScriptDoneMsg(t *testing.T) {
 	config.Save(&config.Config{
 		Version:    "1",
 		Categories: []config.Category{{Name: "tools"}},
-		Scripts:    []config.Script{{Name: "hello", Category: "tools", Type: "script", Path: scriptPath}},
+		Scripts:    []config.Script{{Name: "hello", Category: "tools", Executable: "/bin/sh", Path: scriptPath}},
 	}, config.GlobalConfigPath())
 
 	reg, err := registry.Load()
@@ -193,7 +193,7 @@ func TestRunScriptCmd_ScriptError(t *testing.T) {
 	config.Save(&config.Config{
 		Version:    "1",
 		Categories: []config.Category{{Name: "tools"}},
-		Scripts:    []config.Script{{Name: "fail", Category: "tools", Type: "script", Path: scriptPath}},
+		Scripts:    []config.Script{{Name: "fail", Category: "tools", Executable: "/bin/sh", Path: scriptPath}},
 	}, config.GlobalConfigPath())
 
 	reg, err := registry.Load()

@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/registry"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/runner"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/tui/styles"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/shotgum/stg/internal/registry"
-	"github.com/shotgum/stg/internal/runner"
-	"github.com/shotgum/stg/internal/tui/styles"
 )
 
 type detailMode int
@@ -98,6 +98,11 @@ func (m *DetailModel) SetScript(entry *registry.ScriptEntry, reg *registry.Regis
 	m.vp.GotoTop()
 }
 
+// HelpText returns the cached help text for the currently shown script.
+func (m DetailModel) HelpText() string {
+	return m.helpText
+}
+
 // SetHelpText stores the help output if it belongs to the currently shown script.
 func (m *DetailModel) SetHelpText(scriptName, text string) {
 	if m.scrEntry != nil && m.scrEntry.Name == scriptName {
@@ -115,9 +120,8 @@ func (m DetailModel) Update(msg tea.Msg) (DetailModel, tea.Cmd) {
 	return m, cmd
 }
 
-// View renders the detail panel content (no border).
-// w and h must match the last SetSize call.
-func (m DetailModel) View(w, h int) string {
+// View renders the detail panel content (no border). w must match the last SetSize call.
+func (m DetailModel) View(w int) string {
 	switch m.mode {
 	case detailCategory:
 		return m.renderCategory(w)
@@ -151,7 +155,7 @@ func (m DetailModel) renderCategory(w int) string {
 
 	scriptList := ""
 	for _, s := range m.scripts {
-		scriptList += "\n    " + styles.TypeTag(s.Type) + "  " + styles.ScriptStyle.Render(s.Name)
+		scriptList += "\n    " + styles.ScriptStyle.Render(s.Name)
 	}
 
 	return strings.Join([]string{title, sep, name, desc, "", kv, scriptList}, "\n")
@@ -168,16 +172,21 @@ func (m DetailModel) renderScript(w int) string {
 	desc := styles.DescStyle.Render(e.Description)
 
 	path := ""
+	executable := "/bin/sh"
+	command := ""
 	helpFlag := "--help"
 	if m.reg != nil {
 		path = m.reg.ResolveScriptPath(*e)
+		executable = m.reg.ResolveExecutable(*e)
+		command = executable + " " + path
 		helpFlag = m.reg.ResolveHelpFlag(*e)
 	}
 
 	kv := strings.Join([]string{
 		"  " + styles.DescStyle.Render("Category") + "    " + styles.CategoryStyle.Render(e.Category),
 		"  " + styles.DescStyle.Render("Source") + "      " + styles.Badge(e.Source),
-		"  " + styles.DescStyle.Render("Type") + "        " + styles.TypeTag(e.Type),
+		"  " + styles.DescStyle.Render("Executable") + "  " + styles.DescStyle.Render(executable),
+		"  " + styles.DescStyle.Render("Command") + "     " + styles.DescStyle.Render(command),
 		"  " + styles.DescStyle.Render("Path") + "        " + styles.DescStyle.Render(path),
 		"  " + styles.DescStyle.Render("Help flag") + "   " + styles.DescStyle.Render(helpFlag),
 	}, "\n")

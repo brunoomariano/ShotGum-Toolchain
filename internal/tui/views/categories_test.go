@@ -4,10 +4,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/config"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/registry"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/shotgum/stg/internal/config"
-	"github.com/shotgum/stg/internal/registry"
 )
 
 func makeCategoryEntry(name, desc, source string) registry.CategoryEntry {
@@ -24,22 +24,19 @@ func TestCategoryItem_Title(t *testing.T) {
 	if !strings.Contains(title, "tools") {
 		t.Errorf("Title() = %q, want it to contain 'tools'", title)
 	}
-	if !strings.Contains(title, "[local]") {
-		t.Errorf("Title() = %q, want it to contain '[local]'", title)
-	}
 }
 
-func TestCategoryItem_Title_Global(t *testing.T) {
-	entry := makeCategoryEntry("dev", "Dev tools", "global")
+func TestCategoryItem_Title_User(t *testing.T) {
+	entry := makeCategoryEntry("dev", "Dev tools", "user")
 	item := CategoryItem{entry: entry}
 	title := item.Title()
-	if !strings.Contains(title, "[global]") {
-		t.Errorf("Title() = %q, want it to contain '[global]'", title)
+	if !strings.Contains(title, "dev") {
+		t.Errorf("Title() = %q, want it to contain 'dev'", title)
 	}
 }
 
 func TestCategoryItem_Description(t *testing.T) {
-	entry := makeCategoryEntry("tools", "My tools", "global")
+	entry := makeCategoryEntry("tools", "My tools", "user")
 	item := CategoryItem{entry: entry}
 	desc := item.Description()
 	if !strings.Contains(desc, "My tools") {
@@ -48,7 +45,7 @@ func TestCategoryItem_Description(t *testing.T) {
 }
 
 func TestCategoryItem_FilterValue(t *testing.T) {
-	entry := makeCategoryEntry("deploy", "Deploy scripts", "global")
+	entry := makeCategoryEntry("deploy", "Deploy scripts", "user")
 	item := CategoryItem{entry: entry}
 	if got := item.FilterValue(); got != "deploy" {
 		t.Errorf("FilterValue() = %q, want 'deploy'", got)
@@ -72,18 +69,19 @@ func TestNewCategoryList_Empty(t *testing.T) {
 
 func TestNewCategoryList_WithItems(t *testing.T) {
 	entries := []registry.CategoryEntry{
-		makeCategoryEntry("dev", "Dev tools", "global"),
+		makeCategoryEntry("dev", "Dev tools", "user"),
 		makeCategoryEntry("ops", "Ops tools", "local"),
 	}
 	l := NewCategoryList(entries, 80, 24)
-	if len(l.Items()) != 2 {
-		t.Errorf("expected 2 items, got %d", len(l.Items()))
+	// 2 real entries + 2 section headers ("User" and "Local")
+	if len(l.Items()) != 4 {
+		t.Errorf("expected 4 items (2 entries + 2 section headers), got %d", len(l.Items()))
 	}
 }
 
 func TestNewCategoryList_View_TriggersRender(t *testing.T) {
 	entries := []registry.CategoryEntry{
-		makeCategoryEntry("dev", "Dev tools", "global"),
+		makeCategoryEntry("dev", "Dev tools", "user"),
 		makeCategoryEntry("ops", "Ops tools", "local"),
 	}
 	l := NewCategoryList(entries, 80, 24)
@@ -94,7 +92,7 @@ func TestNewCategoryList_View_TriggersRender(t *testing.T) {
 
 func TestCategoryList_Update_TriggersDelegate(t *testing.T) {
 	entries := []registry.CategoryEntry{
-		makeCategoryEntry("dev", "Dev tools", "global"),
+		makeCategoryEntry("dev", "Dev tools", "user"),
 	}
 	l := NewCategoryList(entries, 80, 24)
 	// Update() calls the delegate's Update method internally
@@ -105,7 +103,7 @@ func TestCategoryList_Update_TriggersDelegate(t *testing.T) {
 }
 
 // TestCategoryDelegate_Render_InvalidItem verifies that Render exits early and writes
-// nothing when the list.Item cannot be type-asserted to CategoryItem.
+// nothing when the list.Item cannot be type-asserted to CategoryItem or SectionHeaderItem.
 func TestCategoryDelegate_Render_InvalidItem(t *testing.T) {
 	d := categoryDelegate{}
 	var buf strings.Builder

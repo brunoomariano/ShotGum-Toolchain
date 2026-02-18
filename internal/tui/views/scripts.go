@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/registry"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/tui/styles"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/shotgum/stg/internal/registry"
-	"github.com/shotgum/stg/internal/tui/styles"
 )
 
 // ScriptItem wraps a ScriptEntry for bubbles/list.
@@ -20,11 +20,7 @@ type ScriptItem struct {
 func (i ScriptItem) Entry() registry.ScriptEntry { return i.entry }
 
 func (i ScriptItem) Title() string {
-	return fmt.Sprintf("%s %s %s",
-		styles.TypeTag(i.entry.Type),
-		styles.Badge(i.entry.Source),
-		styles.ScriptStyle.Render(i.entry.Name),
-	)
+	return styles.ScriptStyle.Render(i.entry.Name)
 }
 
 func (i ScriptItem) Description() string {
@@ -40,34 +36,43 @@ func (d scriptDelegate) Height() int                             { return 2 }
 func (d scriptDelegate) Spacing() int                            { return 1 }
 func (d scriptDelegate) Update(_ tea.Msg, _ *list.Model) tea.Cmd { return nil }
 func (d scriptDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
+	if h, ok := item.(SectionHeaderItem); ok {
+		line := sectionHeaderLine(h.label, m.Width())
+		fmt.Fprintf(w, "%s\n%s", line, "")
+		return
+	}
+
 	i, ok := item.(ScriptItem)
 	if !ok {
 		return
 	}
 
-	title := fmt.Sprintf("  %s %s %s",
-		styles.TypeTag(i.entry.Type),
-		styles.Badge(i.entry.Source),
-		styles.ScriptStyle.Render(i.entry.Name),
-	)
+	title := fmt.Sprintf("  %s", styles.ScriptStyle.Render(i.entry.Name))
 	desc := fmt.Sprintf("  %s", styles.DescStyle.Render(i.entry.Description))
 
 	if index == m.Index() {
-		title = fmt.Sprintf("  %s %s %s",
-			styles.TypeTag(i.entry.Type),
-			styles.Badge(i.entry.Source),
-			lipgloss.NewStyle().Foreground(styles.Purple).Bold(true).Render("▶ "+i.entry.Name),
-		)
+		title = fmt.Sprintf("  %s", lipgloss.NewStyle().Foreground(styles.Purple).Bold(true).Render("▶ "+i.entry.Name))
 	}
 
 	fmt.Fprintf(w, "%s\n%s", title, desc)
 }
 
-// NewScriptList creates a new script list.Model for a given category.
+// NewScriptList creates a new script list.Model for a given category,
+// grouping entries under "Local" and "User" section headers.
 func NewScriptList(categoryName string, entries []registry.ScriptEntry, w, h int) list.Model {
-	items := make([]list.Item, len(entries))
-	for i, e := range entries {
-		items[i] = ScriptItem{entry: e}
+	var items []list.Item
+	var currentSource string
+
+	for _, e := range entries {
+		if e.Source != currentSource {
+			currentSource = e.Source
+			label := "Local"
+			if e.Source == "user" {
+				label = "User"
+			}
+			items = append(items, SectionHeaderItem{label: label})
+		}
+		items = append(items, ScriptItem{entry: e})
 	}
 
 	l := list.New(items, scriptDelegate{}, w, h)
@@ -78,6 +83,13 @@ func NewScriptList(categoryName string, entries []registry.ScriptEntry, w, h int
 	l.SetFilteringEnabled(true)
 	l.Styles.Title = styles.TitleStyle
 	l.Styles.HelpStyle = styles.HelpStyle
+
+	// Start cursor on first real item, skipping any leading section header.
+	if len(items) > 1 {
+		if _, ok := items[0].(SectionHeaderItem); ok {
+			l.Select(1)
+		}
+	}
 
 	return l
 }

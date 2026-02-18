@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/config"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/registry"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/shotgum/stg/internal/config"
-	"github.com/shotgum/stg/internal/registry"
 )
 
 func makeConfirmEntry() registry.ScriptEntry {
@@ -16,7 +16,6 @@ func makeConfirmEntry() registry.ScriptEntry {
 		Script: config.Script{
 			Name:     "deploy",
 			Category: "ops",
-			Type:     "script",
 			Path:     "/scripts/deploy.sh",
 		},
 		Source: "local",
@@ -32,7 +31,7 @@ func collectMsg(cmd tea.Cmd) tea.Msg {
 
 func TestNewConfirmModel(t *testing.T) {
 	entry := makeConfirmEntry()
-	m := NewConfirmModel(entry, nil, 80, 24)
+	m := NewConfirmModel(entry, nil, 80, 24, "")
 	if m.entry.Name != "deploy" {
 		t.Errorf("entry.Name = %q, want 'deploy'", m.entry.Name)
 	}
@@ -45,7 +44,7 @@ func TestNewConfirmModel(t *testing.T) {
 }
 
 func TestConfirmModel_Update_Enter_NoInput(t *testing.T) {
-	m := NewConfirmModel(makeConfirmEntry(), nil, 80, 24)
+	m := NewConfirmModel(makeConfirmEntry(), nil, 80, 24, "")
 	m2, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	_ = m2
 	msg := collectMsg(cmd)
@@ -55,7 +54,7 @@ func TestConfirmModel_Update_Enter_NoInput(t *testing.T) {
 }
 
 func TestConfirmModel_Update_Esc_NoInput(t *testing.T) {
-	m := NewConfirmModel(makeConfirmEntry(), nil, 80, 24)
+	m := NewConfirmModel(makeConfirmEntry(), nil, 80, 24, "")
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	msg := collectMsg(cmd)
 	if _, ok := msg.(ConfirmCancelMsg); !ok {
@@ -64,7 +63,7 @@ func TestConfirmModel_Update_Esc_NoInput(t *testing.T) {
 }
 
 func TestConfirmModel_Update_Q_NoInput(t *testing.T) {
-	m := NewConfirmModel(makeConfirmEntry(), nil, 80, 24)
+	m := NewConfirmModel(makeConfirmEntry(), nil, 80, 24, "")
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 	msg := collectMsg(cmd)
 	if _, ok := msg.(ConfirmCancelMsg); !ok {
@@ -73,7 +72,7 @@ func TestConfirmModel_Update_Q_NoInput(t *testing.T) {
 }
 
 func TestConfirmModel_Update_A_ActivatesInput(t *testing.T) {
-	m := NewConfirmModel(makeConfirmEntry(), nil, 80, 24)
+	m := NewConfirmModel(makeConfirmEntry(), nil, 80, 24, "")
 	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
 	if !m2.inputActive {
 		t.Error("pressing 'a' should activate inputActive")
@@ -81,7 +80,7 @@ func TestConfirmModel_Update_A_ActivatesInput(t *testing.T) {
 }
 
 func TestConfirmModel_Update_Enter_WithInput(t *testing.T) {
-	m := NewConfirmModel(makeConfirmEntry(), nil, 80, 24)
+	m := NewConfirmModel(makeConfirmEntry(), nil, 80, 24, "")
 	// Activate input
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
 	// Press enter with input active
@@ -96,7 +95,7 @@ func TestConfirmModel_Update_Enter_WithInput(t *testing.T) {
 }
 
 func TestConfirmModel_Update_Esc_WithInput_DeactivatesInput(t *testing.T) {
-	m := NewConfirmModel(makeConfirmEntry(), nil, 80, 24)
+	m := NewConfirmModel(makeConfirmEntry(), nil, 80, 24, "")
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
 	if !m.inputActive {
 		t.Fatal("precondition: inputActive should be true")
@@ -114,7 +113,7 @@ func TestConfirmModel_Update_Esc_WithInput_DeactivatesInput(t *testing.T) {
 }
 
 func TestConfirmModel_Update_WindowSize(t *testing.T) {
-	m := NewConfirmModel(makeConfirmEntry(), nil, 0, 0)
+	m := NewConfirmModel(makeConfirmEntry(), nil, 0, 0, "")
 	m2, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 50})
 	if m2.width != 100 || m2.height != 50 {
 		t.Errorf("width/height = %d/%d, want 100/50", m2.width, m2.height)
@@ -122,7 +121,7 @@ func TestConfirmModel_Update_WindowSize(t *testing.T) {
 }
 
 func TestConfirmModel_View_ZeroSize(t *testing.T) {
-	m := NewConfirmModel(makeConfirmEntry(), nil, 0, 0)
+	m := NewConfirmModel(makeConfirmEntry(), nil, 0, 0, "")
 	view := m.View()
 	stripped := stripANSI(view)
 	if !strings.Contains(stripped, "Execute script?") {
@@ -134,7 +133,7 @@ func TestConfirmModel_View_ZeroSize(t *testing.T) {
 }
 
 func TestConfirmModel_View_WithSize(t *testing.T) {
-	m := NewConfirmModel(makeConfirmEntry(), nil, 80, 24)
+	m := NewConfirmModel(makeConfirmEntry(), nil, 80, 24, "")
 	view := m.View()
 	if view == "" {
 		t.Error("View() with size should not be empty")
@@ -144,7 +143,7 @@ func TestConfirmModel_View_WithSize(t *testing.T) {
 // TestConfirmModel_View_WithInputActive verifies that View() renders the inline args
 // text-input and the correct key-hint when inputActive is true.
 func TestConfirmModel_View_WithInputActive(t *testing.T) {
-	m := NewConfirmModel(makeConfirmEntry(), nil, 80, 24)
+	m := NewConfirmModel(makeConfirmEntry(), nil, 80, 24, "")
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
 	if !m.inputActive {
 		t.Fatal("precondition: inputActive should be true after pressing 'a'")
@@ -159,11 +158,53 @@ func TestConfirmModel_View_WithInputActive(t *testing.T) {
 	}
 }
 
+// TestConfirmModel_View_WithHelpText verifies that when inputActive and helpText is set,
+// the help panel is rendered with the script help content.
+func TestConfirmModel_View_WithHelpText(t *testing.T) {
+	m := NewConfirmModel(makeConfirmEntry(), nil, 120, 40, "Usage: deploy [--env prod]")
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	if !m.inputActive {
+		t.Fatal("precondition: inputActive should be true")
+	}
+	view := m.View()
+	stripped := stripANSI(view)
+	if !strings.Contains(stripped, "Script help") {
+		t.Errorf("View() with inputActive+helpText should contain 'Script help', got %q", stripped)
+	}
+	if !strings.Contains(stripped, "Usage: deploy") {
+		t.Errorf("View() with inputActive+helpText should contain help content, got %q", stripped)
+	}
+}
+
+// TestConfirmModel_SetHelpText verifies that SetHelpText updates the model.
+func TestConfirmModel_SetHelpText(t *testing.T) {
+	m := NewConfirmModel(makeConfirmEntry(), nil, 120, 40, "")
+	if m.helpText != "" {
+		t.Error("helpText should be empty initially")
+	}
+	m.SetHelpText("Usage: deploy --env prod")
+	if m.helpText != "Usage: deploy --env prod" {
+		t.Errorf("SetHelpText: helpText = %q, want 'Usage: deploy --env prod'", m.helpText)
+	}
+}
+
+// TestConfirmModel_View_LoadingHelp verifies that when inputActive and helpText is empty,
+// the help panel shows a loading indicator.
+func TestConfirmModel_View_LoadingHelp(t *testing.T) {
+	m := NewConfirmModel(makeConfirmEntry(), nil, 120, 40, "")
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	view := m.View()
+	stripped := stripANSI(view)
+	if !strings.Contains(stripped, "loading help") {
+		t.Errorf("View() with inputActive and no helpText should show 'loading help', got %q", stripped)
+	}
+}
+
 // TestConfirmModel_View_SmallWidth verifies the boxWidth clamping path where the
 // candidate width (m.width - 12) does not exceed the default boxWidth of 50.
 func TestConfirmModel_View_SmallWidth(t *testing.T) {
 	// width=60 → candidate=48 < 50 → boxWidth stays at 50
-	m := NewConfirmModel(makeConfirmEntry(), nil, 60, 24)
+	m := NewConfirmModel(makeConfirmEntry(), nil, 60, 24, "")
 	view := m.View()
 	if view == "" {
 		t.Error("View() with small width should not be empty")
@@ -174,7 +215,7 @@ func TestConfirmModel_View_SmallWidth(t *testing.T) {
 // a non-special key is pressed, the event is forwarded to the text-input via
 // argsInput.Update, returning the updated model and a potential cmd.
 func TestConfirmModel_Update_OtherKey_WithInput(t *testing.T) {
-	m := NewConfirmModel(makeConfirmEntry(), nil, 80, 24)
+	m := NewConfirmModel(makeConfirmEntry(), nil, 80, 24, "")
 	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}}) // activate input
 	if !m.inputActive {
 		t.Fatal("precondition: inputActive should be true")
@@ -198,7 +239,7 @@ func TestNewConfirmModel_WithRegistry(t *testing.T) {
 	config.Save(&config.Config{
 		Version:    "1",
 		Categories: []config.Category{{Name: "ops"}},
-		Scripts:    []config.Script{{Name: "deploy", Category: "ops", Type: "script", Path: scriptPath}},
+		Scripts:    []config.Script{{Name: "deploy", Category: "ops", Executable: "/bin/sh", Path: scriptPath}},
 	}, config.GlobalConfigPath())
 
 	reg, err := registry.Load()
@@ -210,7 +251,7 @@ func TestNewConfirmModel_WithRegistry(t *testing.T) {
 		t.Fatalf("FindScript() error: %v", err)
 	}
 
-	m := NewConfirmModel(*entry, reg, 80, 24)
+	m := NewConfirmModel(*entry, reg, 80, 24, "")
 	if m.resolvedPath != scriptPath {
 		t.Errorf("resolvedPath = %q, want %q", m.resolvedPath, scriptPath)
 	}
