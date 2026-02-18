@@ -5,9 +5,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/shotgum/stg/internal/commands"
-	"github.com/shotgum/stg/internal/registry"
-	"github.com/shotgum/stg/internal/runner"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/commands"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/registry"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/runner"
 )
 
 // knownSubcommands are the Cobra-handled subcommands.

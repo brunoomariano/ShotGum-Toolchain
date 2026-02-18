@@ -1,12 +1,12 @@
 BINARY  := stg
-MODULE  := github.com/shotgum/stg
+MODULE  := github.com/brunoomariano/ShotGum-Toolchain
 CMD     := ./cmd/stg
 
 GO      := go
 GOFLAGS :=
 
-# Inject version from the nearest git tag, e.g. v0.1.0.
-# Falls back to "dev" when there are no tags yet.
+# Inject version from the nearest git tag, e.g. v0.2.0.
+# Falls back to DefaultVersion (internal/version/version.go) when there are no tags yet.
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS := -s -w -X '$(MODULE)/internal/version.Version=$(VERSION)'
 

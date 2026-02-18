@@ -1,4 +1,4 @@
-module github.com/shotgum/stg
+module github.com/brunoomariano/ShotGum-Toolchain
 
 go 1.22
 
