@@ -15,10 +15,10 @@ show_help() {
 
 $(gum style --foreground "$GRAY" "Usage:") deploy [OPTIONS]
 
-$(gum style --foreground "$TEAL" "--env ENV")     Target: staging | production (default: staging)
-$(gum style --foreground "$TEAL" "--tag TAG")     Image tag to deploy            (default: latest)
-$(gum style --foreground "$TEAL" "--dry-run")     Plan without executing
-$(gum style --foreground "$TEAL" "--help")        Show this message"
+$(gum style --foreground "$TEAL" -- "--env ENV")     Target: staging | production (default: staging)
+$(gum style --foreground "$TEAL" -- "--tag TAG")     Image tag to deploy            (default: latest)
+$(gum style --foreground "$TEAL" -- "--dry-run")     Plan without executing
+$(gum style --foreground "$TEAL" -- "--help")        Show this message"
 }
 
 if [[ "${1:-}" == "--help" ]]; then

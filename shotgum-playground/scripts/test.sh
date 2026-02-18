@@ -15,11 +15,11 @@ show_help() {
 
 $(gum style --foreground "$GRAY" "Usage:") test [OPTIONS]
 
-$(gum style --foreground "$TEAL" "--unit")           Run only unit tests
-$(gum style --foreground "$TEAL" "--integration")    Run only integration tests
-$(gum style --foreground "$TEAL" "--coverage")       Generate coverage report
-$(gum style --foreground "$TEAL" "--verbose")        Show individual test output
-$(gum style --foreground "$TEAL" "--help")           Show this message"
+$(gum style --foreground "$TEAL" -- "--unit")           Run only unit tests
+$(gum style --foreground "$TEAL" -- "--integration")    Run only integration tests
+$(gum style --foreground "$TEAL" -- "--coverage")       Generate coverage report
+$(gum style --foreground "$TEAL" -- "--verbose")        Show individual test output
+$(gum style --foreground "$TEAL" -- "--help")           Show this message"
 }
 
 if [[ "${1:-}" == "--help" ]]; then

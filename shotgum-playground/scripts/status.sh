@@ -16,9 +16,9 @@ if [[ "${1:-}" == "--show-me" ]]; then
 
 $(gum style --foreground "$GRAY" "Usage:") status [OPTIONS]
 
-$(gum style --foreground "$TEAL" "--json")        Output as JSON
-$(gum style --foreground "$TEAL" "--watch")       Refresh every 3 seconds
-$(gum style --foreground "$TEAL" "--show-me")     Show this message"
+$(gum style --foreground "$TEAL" -- "--json")        Output as JSON
+$(gum style --foreground "$TEAL" -- "--watch")       Refresh every 3 seconds
+$(gum style --foreground "$TEAL" -- "--show-me")     Show this message"
   exit 0
 fi
 

@@ -14,9 +14,9 @@ show_help() {
 
 $(gum style --foreground "$GRAY" "Usage:") build [OPTIONS]
 
-$(gum style --foreground "$TEAL" "--release")       Build in release mode (default: debug)
-$(gum style --foreground "$TEAL" "--target DIR")    Output directory    (default: ./build)
-$(gum style --foreground "$TEAL" "--help")          Show this message"
+$(gum style --foreground "$TEAL" -- "--release")       Build in release mode (default: debug)
+$(gum style --foreground "$TEAL" -- "--target DIR")    Output directory    (default: ./build)
+$(gum style --foreground "$TEAL" -- "--help")          Show this message"
 }
 
 if [[ "${1:-}" == "--help" ]]; then

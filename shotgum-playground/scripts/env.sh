@@ -15,9 +15,9 @@ if [[ "${1:-}" == "--show-me" ]]; then
 
 $(gum style --foreground "$GRAY" "Usage:") env [OPTIONS]
 
-$(gum style --foreground "$TEAL" "--all")        Include all env vars, not just project ones
-$(gum style --foreground "$TEAL" "--export")     Output as export VAR=value statements
-$(gum style --foreground "$TEAL" "--show-me")    Show this message"
+$(gum style --foreground "$TEAL" -- "--all")        Include all env vars, not just project ones
+$(gum style --foreground "$TEAL" -- "--export")     Output as export VAR=value statements
+$(gum style --foreground "$TEAL" -- "--show-me")    Show this message"
   exit 0
 fi
 

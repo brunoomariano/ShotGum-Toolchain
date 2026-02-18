@@ -15,9 +15,9 @@ show_help() {
 
 $(gum style --foreground "$GRAY" "Usage:") clean [OPTIONS]
 
-$(gum style --foreground "$TEAL" "--all")        Also clear module cache
-$(gum style --foreground "$TEAL" "--dry-run")    Show what would be removed
-$(gum style --foreground "$TEAL" "--help")       Show this message"
+$(gum style --foreground "$TEAL" -- "--all")        Also clear module cache
+$(gum style --foreground "$TEAL" -- "--dry-run")    Show what would be removed
+$(gum style --foreground "$TEAL" -- "--help")       Show this message"
 }
 
 if [[ "${1:-}" == "--help" ]]; then

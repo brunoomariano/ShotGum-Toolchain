@@ -1,4 +1,5 @@
 version: "1"
+default_executable: bash
 
 categories:
   - name: dev
@@ -6,7 +7,13 @@ categories:
     scripts_path: ./scripts
     help_flag: --help
 
+  - name: games
+    description: Interactive games and demos
+    scripts_path: ./scripts
+    help_flag: --help
+
 scripts:
+  # ─── dev ──────────────────────────────────────────────────────────────────
   - name: build
     category: dev
     description: Build the project binary
@@ -56,3 +63,24 @@ scripts:
     type: script
     path: status.sh
     help_flag: --show-me
+
+  # ─── games ────────────────────────────────────────────────────────────────
+  - name: forca-py
+    category: games
+    description: "Jogo da Forca em Python puro — adivinhe a palavra letra a letra"
+    type: executable
+    path: forca.py
+    executable: python3
+
+  - name: forca-gum
+    category: games
+    description: "Jogo da Forca com Bash + gum — versão com interface estilizada"
+    type: script
+    path: forca.sh
+
+  - name: quiz
+    category: games
+    description: "Quiz de trivia sobre tecnologia — 12 perguntas de múltipla escolha"
+    type: executable
+    path: quiz.py
+    executable: python3

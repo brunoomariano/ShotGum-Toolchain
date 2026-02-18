@@ -16,10 +16,10 @@ show_help() {
 
 $(gum style --foreground "$GRAY" "Usage:") logs [OPTIONS]
 
-$(gum style --foreground "$TEAL" "--lines N")     Number of entries to show (default: 20)
-$(gum style --foreground "$TEAL" "--level LEVEL") Filter: debug | info | warn | error
-$(gum style --foreground "$TEAL" "--follow")      Keep tailing (simulated)
-$(gum style --foreground "$TEAL" "--help")        Show this message"
+$(gum style --foreground "$TEAL" -- "--lines N")     Number of entries to show (default: 20)
+$(gum style --foreground "$TEAL" -- "--level LEVEL") Filter: debug | info | warn | error
+$(gum style --foreground "$TEAL" -- "--follow")      Keep tailing (simulated)
+$(gum style --foreground "$TEAL" -- "--help")        Show this message"
 }
 
 if [[ "${1:-}" == "--help" ]]; then

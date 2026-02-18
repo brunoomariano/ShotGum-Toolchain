@@ -15,9 +15,9 @@ show_help() {
 
 $(gum style --foreground "$GRAY" "Usage:") lint [OPTIONS]
 
-$(gum style --foreground "$TEAL" "--fix")        Auto-fix fixable issues
-$(gum style --foreground "$TEAL" "--strict")     Enable extra checks (errcheck, gosec)
-$(gum style --foreground "$TEAL" "--help")       Show this message"
+$(gum style --foreground "$TEAL" -- "--fix")        Auto-fix fixable issues
+$(gum style --foreground "$TEAL" -- "--strict")     Enable extra checks (errcheck, gosec)
+$(gum style --foreground "$TEAL" -- "--help")       Show this message"
 }
 
 if [[ "${1:-}" == "--help" ]]; then
