@@ -582,6 +582,16 @@ func TestAppModel_RenderTwoPanel_DetailFocused(t *testing.T) {
 	_ = view // should not panic; border colors differ from non-focused
 }
 
+func TestAppModel_View_DoesNotOverflowWindowHeight(t *testing.T) {
+	reg := loadTestReg(t, nil)
+	m := appWithSize(t, reg, 80, 24)
+
+	view := m.View()
+	if lines := strings.Count(view, "\n") + 1; lines > m.height {
+		t.Fatalf("view height overflow: got %d lines, window height %d", lines, m.height)
+	}
+}
+
 func TestAppModel_ToggleExecutionLogs(t *testing.T) {
 	reg := loadTestReg(t, nil)
 	m := appWithSize(t, reg, 80, 24)

@@ -19,13 +19,11 @@ import (
 	"github.com/brunoomariano/ShotGum-Toolchain/internal/runner"
 	"github.com/brunoomariano/ShotGum-Toolchain/internal/tui/styles"
 	"github.com/brunoomariano/ShotGum-Toolchain/internal/tui/views"
-	"github.com/brunoomariano/ShotGum-Toolchain/internal/version"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
-const appIssues = version.RepoURL + "/issues"
 const maxExecutionLogs = 80
 const executionLogWindowLines = 6
 
@@ -87,12 +85,20 @@ type AppModel struct {
 }
 
 // panelDims returns the content widths and panel height for the two-panel layout.
-// Header occupies 3 rows (top border + content + bottom border).
-// Help bar occupies 1 row. Panel border adds 2 rows each.
+// It uses the rendered header/footer heights to avoid vertical overflow.
 func (m AppModel) panelDims() (leftW, rightW, panelH int) {
 	leftW = max((m.width-4)*2/5, 10)
 	rightW = max((m.width-4)-leftW, 10)
-	panelH = max(m.height-6, 5) // 3 header + 2 panel borders + 1 help bar
+
+	headerH := lipgloss.Height(m.header.View())
+	footerH := 0
+	if m.showExecutionLogs {
+		footerH = lipgloss.Height(m.renderExecutionLogsFooter())
+	}
+
+	// Layout rows:
+	// header + panel borders/content + help + optional footer.
+	panelH = max(m.height-headerH-footerH-3, 5)
 	return
 }
 
@@ -104,7 +110,7 @@ func NewAppModel(reg *registry.Registry) (AppModel, error) {
 	m := AppModel{
 		state:      stateCategories,
 		reg:        reg,
-		header:     views.NewHeaderModel(version.Version, appIssues),
+		header:     views.NewHeaderModel(),
 		catList:    catList,
 		scriptList: views.NewScriptList("", []registry.ScriptEntry{}, 80, 20),
 	}

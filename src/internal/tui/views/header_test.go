@@ -27,17 +27,14 @@ func stripANSI(s string) string {
 }
 
 func TestNewHeaderModel(t *testing.T) {
-	h := NewHeaderModel("1.2.3", "github.com/user/repo/issues")
-	if h.version != "1.2.3" {
-		t.Errorf("version = %q, want 1.2.3", h.version)
-	}
-	if h.issues != "github.com/user/repo/issues" {
-		t.Errorf("issues = %q, unexpected", h.issues)
+	h := NewHeaderModel()
+	if h.width != 0 {
+		t.Errorf("width = %d, want 0", h.width)
 	}
 }
 
 func TestHeaderModel_Init(t *testing.T) {
-	h := NewHeaderModel("1.0", "issues")
+	h := NewHeaderModel()
 	cmd := h.Init()
 	if cmd != nil {
 		t.Error("Init() should return nil")
@@ -45,7 +42,7 @@ func TestHeaderModel_Init(t *testing.T) {
 }
 
 func TestHeaderModel_UpdateWindowSize(t *testing.T) {
-	h := NewHeaderModel("1.0", "issues")
+	h := NewHeaderModel()
 	h2, _ := h.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	if h2.width != 120 {
 		t.Errorf("width = %d, want 120", h2.width)
@@ -53,26 +50,43 @@ func TestHeaderModel_UpdateWindowSize(t *testing.T) {
 }
 
 func TestHeaderModel_View_ContainsMetadata(t *testing.T) {
-	h := NewHeaderModel("2.0.1", "github.com/org/repo/issues")
-	h.width = 100
+	h := NewHeaderModel()
+	h.width = 160
 	view := h.View()
 	stripped := stripANSI(view)
-	if !strings.Contains(stripped, "SHOTGUM") {
-		t.Errorf("View() should contain SHOTGUM: %q", stripped)
+	if !strings.Contains(stripped, "Script Manager") {
+		t.Errorf("View() should contain 'Script Manager': %q", stripped)
 	}
-	if !strings.Contains(stripped, "2.0.1") {
-		t.Errorf("View() should contain version 2.0.1: %q", stripped)
+	if !strings.Contains(stripped, "0.2.0") {
+		t.Errorf("View() should contain version 0.2.0: %q", stripped)
 	}
-	if !strings.Contains(stripped, "github.com/org/repo/issues") {
-		t.Errorf("View() should contain issues URL: %q", stripped)
+	if !strings.Contains(stripped, "https://github.com/brunoomariano/ShotGum-Toolchain") {
+		t.Errorf("View() should contain repo URL: %q", stripped)
 	}
 }
 
 func TestHeaderModel_View_ZeroWidth_NoPanic(t *testing.T) {
-	h := NewHeaderModel("1.0", "issues")
+	h := NewHeaderModel()
 	// width = 0 → innerW clamped to 20 minimum; should not panic
 	view := h.View()
 	if view == "" {
 		t.Error("View() with zero width returned empty string")
+	}
+}
+
+func TestHeaderModel_View_NarrowWidth_UsesCompactLayout(t *testing.T) {
+	h := NewHeaderModel()
+	h.width = 30
+	view := h.View()
+	stripped := stripANSI(view)
+
+	if !strings.Contains(stripped, "ShotGum") {
+		t.Errorf("compact View() should contain ShotGum title: %q", stripped)
+	}
+	if !strings.Contains(stripped, "Script Manager") {
+		t.Errorf("compact View() should contain subtitle: %q", stripped)
+	}
+	if strings.Contains(stripped, artRow1) {
+		t.Errorf("compact View() should not render wide ASCII art row: %q", stripped)
 	}
 }

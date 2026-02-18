@@ -102,7 +102,7 @@ func NewCategoryList(entries []registry.CategoryEntry, w, h int) list.Model {
 	}
 
 	l := list.New(items, categoryDelegate{}, w, h)
-	l.Title = styles.TitleStyle.Render("ShotGum") + styles.DescStyle.Render("  — script manager")
+	l.SetShowTitle(false)
 	l.SetShowStatusBar(true)
 	l.SetFilteringEnabled(true)
 	l.Styles.Title = styles.TitleStyle

@@ -7,10 +7,9 @@ GOFLAGS  :=
 SRC      := src
 BUILDDIR := build
 
-# Inject version from the nearest git tag, e.g. v0.2.0.
-# Falls back to DefaultVersion (internal/version/version.go) when there are no tags yet.
-VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
-LDFLAGS := -s -w -X '$(MODULE)/internal/version.Version=$(VERSION)'
+# Read version directly from internal/version/version.go (single source of truth).
+VERSION := $(shell sed -n 's/^const DefaultVersion = "\(.*\)"/\1/p' $(SRC)/internal/version/version.go | head -n1)
+LDFLAGS := -s -w
 
 COVERAGE_MIN := 85
 COVERAGE_OUT := coverage.out
