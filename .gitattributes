@@ -1,0 +1,36 @@
+# Normalize line endings to LF on check-in for all text files
+* text=auto eol=lf
+
+# Go source
+*.go text eol=lf
+go.mod text eol=lf
+go.sum text eol=lf
+
+# Shell scripts — must be LF and marked as executable
+*.sh text eol=lf
+install.sh text eol=lf
+
+# Config / data
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.toml text eol=lf
+*.env text eol=lf
+
+# Docs / markup
+*.md text eol=lf
+*.txt text eol=lf
+
+# CI / tooling
+Makefile text eol=lf
+.gitignore text eol=lf
+.gitattributes text eol=lf
+
+# Binary files — no line-ending conversion, no diff
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.svg binary
+stg binary
