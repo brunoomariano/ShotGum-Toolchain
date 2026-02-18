@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shotgum/stg/internal/config"
-	"github.com/shotgum/stg/internal/registry"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/config"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/registry"
 )
 
 // runAddFolder runs addFolderCmd with the given args and returns the error.
@@ -253,7 +253,7 @@ func TestRunDirect(t *testing.T) {
 	config.Save(&config.Config{
 		Version:    "1",
 		Categories: []config.Category{{Name: "tools"}},
-		Scripts:    []config.Script{{Name: "echo", Category: "tools", Type: "script", Path: scriptPath}},
+		Scripts:    []config.Script{{Name: "echo", Category: "tools", Executable: "/bin/sh", Path: scriptPath}},
 	}, config.GlobalConfigPath())
 
 	reg, err := registry.Load()

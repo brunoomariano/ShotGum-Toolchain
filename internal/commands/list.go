@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/registry"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/tui/styles"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/shotgum/stg/internal/registry"
-	"github.com/shotgum/stg/internal/tui/styles"
 	"github.com/spf13/cobra"
 )
 
@@ -69,11 +69,10 @@ func listScripts(reg *registry.Registry, category string) error {
 
 	for _, s := range scripts {
 		badge := styles.Badge(s.Source)
-		typTag := styles.TypeTag(s.Type)
 		name := styles.ScriptStyle.Render(s.Name)
 		desc := styles.DescStyle.Render(s.Description)
 
-		fmt.Printf("  %s %s %-20s  %s\n", badge, typTag, name, desc)
+		fmt.Printf("  %s %-20s  %s\n", badge, name, desc)
 	}
 	fmt.Println()
 	return nil

@@ -1,8 +1,8 @@
 package commands
 
 import (
-	"github.com/shotgum/stg/internal/registry"
-	"github.com/shotgum/stg/internal/runner"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/registry"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/runner"
 )
 
 // runDirect runs a script directly (no TUI), forwarding extra args to the script.

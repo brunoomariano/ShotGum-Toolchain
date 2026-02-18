@@ -6,10 +6,23 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/shotgum/stg/internal/config"
-	"github.com/shotgum/stg/internal/tui/styles"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/config"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/tui/styles"
 	"github.com/spf13/cobra"
 )
+
+// loadOrInitGlobalConfig loads the global config, creating a minimal default if
+// it does not exist yet (before stg init has been run).
+func loadOrInitGlobalConfig() (*config.Config, error) {
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		return nil, err
+	}
+	if cfg == nil {
+		cfg = &config.Config{Version: "1", HelpFlag: "--help"}
+	}
+	return cfg, nil
+}
 
 func addCmd() *cobra.Command {
 	add := &cobra.Command{
@@ -48,12 +61,9 @@ func addFolderCmd() *cobra.Command {
 				name = filepath.Base(folderPath)
 			}
 
-			globalCfg, err := config.LoadGlobal()
+			globalCfg, err := loadOrInitGlobalConfig()
 			if err != nil {
 				return err
-			}
-			if globalCfg == nil {
-				globalCfg = &config.Config{Version: "1", HelpFlag: "--help"}
 			}
 
 			// Check for duplicate category name
@@ -70,8 +80,8 @@ func addFolderCmd() *cobra.Command {
 			}
 			globalCfg.Categories = append(globalCfg.Categories, cat)
 
-			// Scan for .sh files and suggest registering them
-			scripts, _ := filepath.Glob(filepath.Join(folderPath, "*.sh"))
+			// Scan for .sh files and suggest registering them (best-effort).
+			scripts, _ := filepath.Glob(filepath.Join(folderPath, "*.sh")) //nolint:errcheck // Glob only errors on malformed patterns; ours is static.
 
 			if err := config.Save(globalCfg, config.GlobalConfigPath()); err != nil {
 				return err
@@ -106,7 +116,7 @@ func addFolderCmd() *cobra.Command {
 }
 
 func addScriptCmd() *cobra.Command {
-	var category, name, desc, scriptType string
+	var category, name, desc, scriptExec string
 
 	cmd := &cobra.Command{
 		Use:   "script <path>",
@@ -131,20 +141,9 @@ func addScriptCmd() *cobra.Command {
 				name = strings.TrimSuffix(base, filepath.Ext(base))
 			}
 
-			if scriptType == "" {
-				if strings.HasSuffix(scriptPath, ".sh") {
-					scriptType = "script"
-				} else {
-					scriptType = "executable"
-				}
-			}
-
-			globalCfg, err := config.LoadGlobal()
+			globalCfg, err := loadOrInitGlobalConfig()
 			if err != nil {
 				return err
-			}
-			if globalCfg == nil {
-				globalCfg = &config.Config{Version: "1", HelpFlag: "--help"}
 			}
 
 			// Verify the category exists
@@ -170,7 +169,7 @@ func addScriptCmd() *cobra.Command {
 				Name:        name,
 				Category:    category,
 				Description: desc,
-				Type:        scriptType,
+				Executable:  scriptExec,
 				Path:        scriptPath,
 			}
 			globalCfg.Scripts = append(globalCfg.Scripts, script)
@@ -191,7 +190,7 @@ func addScriptCmd() *cobra.Command {
 	cmd.Flags().StringVar(&category, "category", "", "Category to add the script to (required)")
 	cmd.Flags().StringVar(&name, "name", "", "Script name (default: filename without extension)")
 	cmd.Flags().StringVar(&desc, "desc", "", "Script description")
-	cmd.Flags().StringVar(&scriptType, "type", "", "Script type: script or executable (auto-detected if not set)")
+	cmd.Flags().StringVar(&scriptExec, "executable", "", "Executable for this script (defaults to config default_executable)")
 
 	return cmd
 }

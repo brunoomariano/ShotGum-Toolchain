@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shotgum/stg/internal/config"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/config"
 )
 
 func runInit() (string, error) {

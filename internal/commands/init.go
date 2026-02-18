@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/shotgum/stg/internal/config"
-	"github.com/shotgum/stg/internal/tui/styles"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/config"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/tui/styles"
 	"github.com/spf13/cobra"
 )
 
@@ -22,7 +22,7 @@ func initCmd() *cobra.Command {
 			// Check if already initialized
 			if _, err := os.Stat(cfgPath); err == nil {
 				fmt.Printf("%s ShotGum is already initialized at %s\n",
-					styles.GlobalBadge.Render("ℹ"),
+					styles.UserBadge.Render("ℹ"),
 					styles.DescStyle.Render(cfgPath),
 				)
 				return nil

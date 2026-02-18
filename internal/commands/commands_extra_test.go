@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shotgum/stg/internal/config"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/config"
 )
 
 // TestAddCmd_SubcommandRegistration verifies addCmd creates parent with subcommands.
@@ -63,6 +63,9 @@ func TestRoot_CommandStructure(t *testing.T) {
 	if !found["init"] {
 		t.Error("root should have 'init' subcommand")
 	}
+	if root.PersistentFlags().Lookup("logs") == nil {
+		t.Error("root should expose --logs flag")
+	}
 }
 
 // TestListCmd_Execute_NoCategories exercises the full listCmd path.
@@ -98,7 +101,7 @@ func TestListCmd_Execute_WithCategory(t *testing.T) {
 	config.Save(&config.Config{
 		Version:    "1",
 		Categories: []config.Category{{Name: "tools"}},
-		Scripts:    []config.Script{{Name: "build", Category: "tools", Type: "script"}},
+		Scripts:    []config.Script{{Name: "build", Category: "tools", Executable: "/bin/sh"}},
 	}, config.GlobalConfigPath())
 
 	out := captureStdout(func() {
@@ -157,7 +160,7 @@ func TestRoot_DirectRun_Success(t *testing.T) {
 	config.Save(&config.Config{
 		Version:    "1",
 		Categories: []config.Category{{Name: "tools"}},
-		Scripts:    []config.Script{{Name: "echo", Category: "tools", Type: "script", Path: scriptPath}},
+		Scripts:    []config.Script{{Name: "echo", Category: "tools", Executable: "/bin/sh", Path: scriptPath}},
 	}, config.GlobalConfigPath())
 
 	out := captureStdout(func() {
@@ -188,7 +191,7 @@ func TestAddScriptCmd_Duplicate(t *testing.T) {
 	config.Save(&config.Config{
 		Version:    "1",
 		Categories: []config.Category{{Name: "tools"}},
-		Scripts:    []config.Script{{Name: "build", Category: "tools", Type: "script", Path: scriptPath}},
+		Scripts:    []config.Script{{Name: "build", Category: "tools", Executable: "/bin/sh", Path: scriptPath}},
 	}, config.GlobalConfigPath())
 
 	err := runAddScript([]string{scriptPath, "--category", "tools", "--name", "build"})

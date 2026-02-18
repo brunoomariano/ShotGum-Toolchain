@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shotgum/stg/internal/config"
-	"github.com/shotgum/stg/internal/registry"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/config"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/registry"
 )
 
 // captureStdout runs f and returns whatever was written to os.Stdout.
@@ -102,7 +102,7 @@ func TestListScripts_WithScripts(t *testing.T) {
 			{Name: "tools"},
 		},
 		Scripts: []config.Script{
-			{Name: "build", Category: "tools", Type: "script", Description: "Build it"},
+			{Name: "build", Category: "tools", Executable: "/bin/sh", Description: "Build it"},
 		},
 	}
 	setupHome(t, cfg)
