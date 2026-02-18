@@ -83,6 +83,7 @@ download_source() {
 build_and_install() {
   local ref="$1"
   local build_version="$ref"
+  local built_bin=""
 
   step "Building from source with make build..."
   (
@@ -90,10 +91,17 @@ build_and_install() {
     VERSION="$build_version" make build
   )
 
-  [[ -x "$SOURCE_DIR/$BINARY" ]] || die "Build finished but binary '$BINARY' was not produced"
+  if [[ -x "$SOURCE_DIR/build/$BINARY" ]]; then
+    built_bin="$SOURCE_DIR/build/$BINARY"
+  elif [[ -x "$SOURCE_DIR/$BINARY" ]]; then
+    # Backward compatibility in case build output path changes.
+    built_bin="$SOURCE_DIR/$BINARY"
+  else
+    die "Build finished but binary '$BINARY' was not produced"
+  fi
 
   mkdir -p "$INSTALL_DIR"
-  install -m755 "$SOURCE_DIR/$BINARY" "$INSTALL_DIR/$BINARY"
+  install -m755 "$built_bin" "$INSTALL_DIR/$BINARY"
   ok "Installed → $INSTALL_DIR/$BINARY"
 }
 
