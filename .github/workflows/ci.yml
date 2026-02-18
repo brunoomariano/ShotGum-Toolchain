@@ -19,7 +19,8 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version-file: src/go.mod
+          cache-dependency-path: src/go.sum
           cache: true
 
       - name: Run CI checks
