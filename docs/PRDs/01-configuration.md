@@ -2,186 +2,106 @@
 
 ## Visão Geral
 
-O ShotGum usa arquivos YAML para definir categorias e scripts. Existem dois escopos de configuração: **global** (usuário) e **local** (projeto). Ambos são carregados e mesclados pelo Registry com precedência local.
+O ShotGum usa YAML com dois escopos:
 
----
+- Global: `~/.config/shotgum/config.yaml`
+- Local: `.shotgum.yaml` (descoberto subindo diretórios a partir do CWD)
 
-## Schema de Dados
-
-### Config (raiz do YAML)
+## Schema Atual
 
 ```yaml
 version: "1"
-scripts_home: "~/.shotgum/scripts"   # diretório padrão para scripts globais
-help_flag: "--help"                   # flag padrão de help para scripts
+scripts_home: "~/.shotgum/scripts"
+help_flag: "--help"
+default_executable: "/bin/sh"
 
 categories:
   - name: dev
     description: "Development scripts"
-    scripts_path: "./scripts"         # relativo ao arquivo YAML
-    help_flag: "--help"               # override de categoria (opcional)
+    scripts_path: "./scripts"
+    help_flag: "--help"
 
 scripts:
   - name: build
     category: dev
-    description: "Build the project"
-    type: script                      # "script" | "executable"
-    path: "./scripts/build.sh"
-    help_flag: "--help"               # override de script (opcional)
+    description: "Build project"
+    executable: "bash"      # opcional, sobrepõe default_executable
+    path: "./build.sh"
+    help_flag: "--help"
 ```
 
 ### Estruturas Go
 
 ```go
-// internal/config/schema.go
-
 type Config struct {
     Version     string     `yaml:"version"`
     ScriptsHome string     `yaml:"scripts_home"`
     HelpFlag    string     `yaml:"help_flag"`
+    DefaultExec string     `yaml:"default_executable"`
     Categories  []Category `yaml:"categories"`
     Scripts     []Script   `yaml:"scripts"`
-    Source      string     // "global" | "local" — injetado no load, não no YAML
-}
-
-type Category struct {
-    Name        string `yaml:"name"`
-    Description string `yaml:"description"`
-    ScriptsPath string `yaml:"scripts_path"`
-    HelpFlag    string `yaml:"help_flag"`
+    Source      string     `yaml:"-"`
 }
 
 type Script struct {
     Name        string `yaml:"name"`
     Category    string `yaml:"category"`
     Description string `yaml:"description"`
-    Type        string `yaml:"type"`   // "script" | "executable"
+    Executable  string `yaml:"executable"`
     Path        string `yaml:"path"`
     HelpFlag    string `yaml:"help_flag"`
 }
 ```
 
----
-
-## Hierarquia de Configuração
-
-```mermaid
-graph TD
-    subgraph "Escopo Global"
-        GF["~/.config/shotgum/config.yaml"]
-    end
-
-    subgraph "Escopo Local (projeto)"
-        LF[".shotgum.yaml\n(descoberto upward a partir do CWD)"]
-    end
-
-    Registry["Registry\n(Merger com precedência local)"]
-
-    GF -->|"Source = 'global'"| Registry
-    LF -->|"Source = 'local'"| Registry
-
-    Registry --> Categories["Categorias mescladas"]
-    Registry --> Scripts["Scripts mesclados"]
-```
-
----
-
-## Fluxo de Loading
+## Carregamento
 
 ```mermaid
 flowchart TD
-    Start([Inicializa Registry]) --> LoadGlobal
-
-    LoadGlobal["LoadGlobal()\n~/.config/shotgum/config.yaml"] --> GExists{Arquivo existe?}
-    GExists -->|Não| GNil["global = nil"]
-    GExists -->|Sim| GParse["Faz parse YAML\nDefine Source = 'global'"]
-    GParse --> GExpand["Expande paths\n(~, $ENV_VAR)"]
-    GExpand --> GLoaded["global = &Config{...}"]
-
-    GNil --> LoadLocal
-    GLoaded --> LoadLocal
-
-    LoadLocal["LoadLocal()\nWalk CWD upward"] --> FindYAML{".shotgum.yaml\nencontrado?"}
-    FindYAML -->|Não| LNil["local = nil"]
-    FindYAML -->|Sim| LParse["Faz parse YAML\nDefine Source = 'local'"]
-    LParse --> LExpand["Expande paths\n(~, $ENV_VAR)"]
-    LExpand --> LLoaded["local = &Config{...}"]
-
-    LNil --> Done
-    LLoaded --> Done
-
-    Done([Registry pronto])
+    Start[registry.Load] --> G[config.LoadGlobal]
+    G --> L[config.LoadLocal]
+    L --> End[Registry pronto]
 ```
 
----
+Regras do loader (`internal/config/config.go`):
 
-## Descoberta do Arquivo Local
+- Arquivo ausente retorna `nil` (não é erro).
+- `Source` é definido em memória (`global`/`local`).
+- `~` e `$ENV` são expandidos em:
+  - `scripts_home`
+  - `default_executable`
+  - `categories[].scripts_path`
+  - `scripts[].path`
+  - `scripts[].executable`
 
-O arquivo `.shotgum.yaml` é descoberto caminhando do CWD para a raiz, semelhante ao comportamento do `git`:
+## Descoberta de `.shotgum.yaml`
 
-```mermaid
-flowchart LR
-    CWD["/home/user/proj/src/cmd"] -->|"Não encontrou"| P1
-    P1["/home/user/proj/src"] -->|"Não encontrou"| P2
-    P2["/home/user/proj"] -->|"Encontrou!"| Found[".shotgum.yaml"]
-    Found --> Stop([Para a busca])
-```
+Busca do CWD até a raiz do filesystem, parando na primeira ocorrência.
 
-**Regra:** A busca para na primeira ocorrência de `.shotgum.yaml` encontrada ao subir nos diretórios. Se chegar na raiz do sistema de arquivos sem encontrar, `local = nil`.
+## Inicialização (`stg init`)
 
----
+`config.EnsureDefault()` cria, se necessário:
 
-## Expansão de Paths
+- `~/.config/shotgum/config.yaml`
+- `~/.shotgum/scripts/`
 
-Todos os paths em configuração passam por `expandPath()` antes de uso:
+Config default atual:
 
-| Entrada | Resultado |
-|---|---|
-| `~/scripts` | `/home/user/scripts` |
-| `$HOME/scripts` | `/home/user/scripts` |
-| `$PROJECT_DIR/scripts` | `[valor de $PROJECT_DIR]/scripts` |
-| `./scripts` | Mantido relativo (resolvido pelo Registry later) |
-| `/absolute/path` | Mantido como está |
-
----
-
-## Inicialização (First Run)
-
-Quando o usuário executa `stg init`, o sistema garante a existência da configuração global padrão:
-
-```mermaid
-flowchart TD
-    Init["stg init"] --> CheckDir{"~/.config/shotgum/\nexiste?"}
-    CheckDir -->|Não| CreateDir["MkdirAll ~/.config/shotgum/"]
-    CheckDir -->|Sim| CheckFile{"config.yaml\nexiste?"}
-    CreateDir --> CheckFile
-    CheckFile -->|Não| WriteDefault["Escreve config.yaml\ncom defaults"]
-    CheckFile -->|Sim| Skip["Nenhuma ação"]
-    WriteDefault --> CreateScripts["MkdirAll ~/.shotgum/scripts/"]
-    CreateScripts --> Done([Configuração pronta])
-    Skip --> Done
-```
-
-**Config padrão gerada:**
 ```yaml
 version: "1"
 scripts_home: "~/.shotgum/scripts"
 help_flag: "--help"
-categories: []
-scripts: []
+default_executable: "/bin/sh"
 ```
-
----
 
 ## Regras de Negócio
 
-| # | Regra |
+| ID | Regra |
 |---|---|
-| R-CFG-01 | `Source` nunca é escrito no YAML — é injetado em memória no momento do load |
-| R-CFG-02 | Um arquivo YAML ausente resulta em `nil`, não em erro — o sistema continua sem ele |
-| R-CFG-03 | A descoberta local segue o CWD no momento de início do processo `stg` |
-| R-CFG-04 | Paths com `~` são expandidos usando `os.UserHomeDir()` |
-| R-CFG-05 | Paths com `$VAR` são expandidos usando `os.ExpandEnv()` |
-| R-CFG-06 | `version: "1"` é o único schema suportado atualmente |
-| R-CFG-07 | `scripts_home` só é usado como base de resolução quando um path de script é relativo e não há `scripts_path` de categoria |
-| R-CFG-08 | `stg init` é idempotente — nunca sobrescreve config existente |
+| R-CFG-01 | `Source` nunca é persistido no YAML |
+| R-CFG-02 | Config ausente retorna `nil`, sem interromper o sistema |
+| R-CFG-03 | Descoberta local depende do CWD no momento da execução |
+| R-CFG-04 | `~` é expandido com `os.UserHomeDir()` |
+| R-CFG-05 | `$VAR` é expandido com `os.ExpandEnv()` |
+| R-CFG-06 | Defaults do `init`: `version=1`, `help_flag=--help`, `default_executable=/bin/sh` |
+| R-CFG-07 | Campo de script para interpretador é `executable` (não `type`) |
+| R-CFG-08 | `stg init` é idempotente |
