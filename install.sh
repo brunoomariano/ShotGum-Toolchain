@@ -1,19 +1,20 @@
 #!/usr/bin/env bash
-# install.sh — Install or update stg (ShotGum script manager)
+# install.sh — Install or update stg (ShotGum script manager) from source
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/brunoomariano/ShotGum-Toolchain/main/install.sh | bash
 #
 # Environment overrides:
-#   STG_VERSION      — pin a specific release, e.g. STG_VERSION=v0.2.0
-#   STG_INSTALL_DIR  — install location  (default: ~/.local/bin)
+#   STG_REF          — source ref to install (default: main). Accepts tag or branch name.
+#   STG_VERSION      — backward-compatible alias for STG_REF
+#   STG_INSTALL_DIR  — install location (default: ~/.local/bin)
 
 set -euo pipefail
 
-REPO="brunoomariano/ShotGum-Toolchain"
+REPO="brunoomariano/ShotGum-Toolchain"  # keep in sync with internal/version/version.go → Repo
 BINARY="stg"
 INSTALL_DIR="${STG_INSTALL_DIR:-$HOME/.local/bin}"
-GITHUB_API="https://api.github.com"
+REF="${STG_REF:-${STG_VERSION:-main}}"
 GITHUB_BASE="https://github.com"
 
 # ── Output helpers ────────────────────────────────────────────────────────────
@@ -31,36 +32,157 @@ need() {
   command -v "$1" &>/dev/null || die "Required tool not found: $1"
 }
 
-# ── Platform detection ────────────────────────────────────────────────────────
+# ── Interactive prompt (works with curl | bash) ─────────────────────────────
 
-detect_os() {
-  case "$(uname -s)" in
-    Linux)  echo "linux"  ;;
-    Darwin) echo "darwin" ;;
-    *)      die "Unsupported OS: $(uname -s). Install manually from $GITHUB_BASE/$REPO/releases" ;;
-  esac
+ask_tty() {
+  local prompt="$1"
+  [[ ! -e /dev/tty ]] && return 1
+  local answer=""
+  printf "\n  %s [y/N]: " "$prompt" >/dev/tty
+  read -r answer </dev/tty 2>/dev/null || return 1
+  [[ "${answer,,}" == "y" ]]
 }
 
-detect_arch() {
-  case "$(uname -m)" in
-    x86_64)        echo "amd64" ;;
-    aarch64|arm64) echo "arm64" ;;
-    *)             die "Unsupported architecture: $(uname -m). Install manually from $GITHUB_BASE/$REPO/releases" ;;
-  esac
+# ── Source download/build helpers ─────────────────────────────────────────────
+
+TMP_ROOT=""
+SOURCE_DIR=""
+RESOLVED_REF_KIND=""
+
+cleanup() {
+  [[ -n "${TMP_ROOT:-}" && -d "$TMP_ROOT" ]] && rm -rf "$TMP_ROOT"
 }
 
-# ── Version helpers ───────────────────────────────────────────────────────────
+download_source() {
+  local ref="$1"
+  local archive="$TMP_ROOT/repo.tar.gz"
 
-latest_version() {
-  curl -fsSL "$GITHUB_API/repos/$REPO/releases/latest" \
-    | grep '"tag_name"' \
-    | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/'
+  local url_tag="$GITHUB_BASE/$REPO/archive/refs/tags/${ref}.tar.gz"
+  local url_branch="$GITHUB_BASE/$REPO/archive/refs/heads/${ref}.tar.gz"
+
+  step "Downloading source ($ref)..."
+
+  if curl -fsSL "$url_tag" -o "$archive" 2>/dev/null; then
+    RESOLVED_REF_KIND="tag"
+    ok "Using tag: $ref"
+  elif curl -fsSL "$url_branch" -o "$archive" 2>/dev/null; then
+    RESOLVED_REF_KIND="branch"
+    ok "Using branch: $ref"
+  else
+    die "Could not download ref '$ref' as tag or branch from $GITHUB_BASE/$REPO"
+  fi
+
+  tar -xzf "$archive" -C "$TMP_ROOT"
+
+  SOURCE_DIR="$(find "$TMP_ROOT" -mindepth 1 -maxdepth 1 -type d | head -1)"
+  [[ -z "$SOURCE_DIR" || ! -d "$SOURCE_DIR" ]] && die "Could not locate extracted source directory"
+
+  ok "Source ready → $SOURCE_DIR"
 }
 
-current_version() {
-  command -v "$BINARY" &>/dev/null \
-    && "$BINARY" --version 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1 \
-    || echo ""
+build_and_install() {
+  local ref="$1"
+  local build_version="$ref"
+
+  step "Building from source with make build..."
+  (
+    cd "$SOURCE_DIR"
+    VERSION="$build_version" make build
+  )
+
+  [[ -x "$SOURCE_DIR/$BINARY" ]] || die "Build finished but binary '$BINARY' was not produced"
+
+  mkdir -p "$INSTALL_DIR"
+  install -m755 "$SOURCE_DIR/$BINARY" "$INSTALL_DIR/$BINARY"
+  ok "Installed → $INSTALL_DIR/$BINARY"
+}
+
+# ── Optional extras from downloaded source ────────────────────────────────────
+
+install_playground_from_source() {
+  local dest="$HOME/shotgum-playground"
+  local src="$SOURCE_DIR/shotgum-playground"
+
+  [[ -d "$src" ]] || { warn "shotgum-playground not found in downloaded source."; return 1; }
+
+  if [[ -d "$dest" ]]; then
+    warn "Directory already exists: $dest — skipping copy."
+    return 0
+  fi
+
+  cp -R "$src" "$dest"
+
+  ok "Playground ready → $dest"
+  printf "\n"
+  dim "  Explore it:"
+  dim "    cd ~/shotgum-playground"
+  dim "    stg"
+}
+
+install_defaults_from_source() {
+  local scripts_dir="$HOME/.shotgum/scripts/shotgum"
+  local src_dir="$SOURCE_DIR/defaults/scripts"
+  local stg_bin="$INSTALL_DIR/$BINARY"
+
+  step "Installing default project scripts..."
+
+  [[ -d "$src_dir" ]] || { warn "defaults/scripts not found in downloaded source."; return 1; }
+
+  if [[ ! -x "$stg_bin" ]]; then
+    stg_bin="$(command -v "$BINARY" || true)"
+  fi
+
+  mkdir -p "$scripts_dir"
+
+  local ok_count=0
+  for name in star issue; do
+    local src="$src_dir/${name}.sh"
+    local dest="$scripts_dir/${name}.sh"
+    if [[ -f "$src" ]]; then
+      cp "$src" "$dest"
+      chmod +x "$dest"
+      ok "  Installed: $dest"
+      ok_count=$(( ok_count + 1 ))
+    else
+      warn "  Missing ${name}.sh in source — skipping."
+    fi
+  done
+
+  [[ "$ok_count" -eq 0 ]] && { warn "No scripts installed. Aborting registration."; return 1; }
+
+  if [[ -z "${stg_bin:-}" || ! -x "$stg_bin" ]]; then
+    warn "Could not find stg binary to register scripts automatically."
+    warn "Run 'stg init' and add scripts from $scripts_dir manually."
+    return 0
+  fi
+
+  "$stg_bin" init 2>/dev/null || true
+
+  "$stg_bin" add folder "$scripts_dir" \
+    --name shotgum \
+    --desc "ShotGum community scripts (star, issue)" \
+    2>/dev/null || true
+
+  [[ -f "$scripts_dir/star.sh" ]] && \
+    "$stg_bin" add script "$scripts_dir/star.sh" \
+      --category shotgum \
+      --name star \
+      --desc "Star ShotGum on GitHub" \
+      --executable bash \
+      2>/dev/null || true
+
+  [[ -f "$scripts_dir/issue.sh" ]] && \
+    "$stg_bin" add script "$scripts_dir/issue.sh" \
+      --category shotgum \
+      --name issue \
+      --desc "Open a well-documented issue on GitHub" \
+      --executable bash \
+      2>/dev/null || true
+
+  ok "Default project scripts registered in global config"
+  printf "\n"
+  dim "  Open stg and look for the 'shotgum' category."
+  dim "  Or run directly: stg shotgum star"
 }
 
 # ── Install ───────────────────────────────────────────────────────────────────
@@ -71,68 +193,18 @@ main() {
 
   need curl
   need tar
+  need make
+  need go
 
-  local os arch
-  os=$(detect_os)
-  arch=$(detect_arch)
-  step "Platform: $os/$arch"
+  step "Source ref: $REF"
 
-  # Resolve target version
-  local version
-  version="${STG_VERSION:-$(latest_version)}"
-  [[ -z "$version" ]] && die "Could not fetch latest version. Check your internet connection."
-  step "Version:  $version"
+  TMP_ROOT="$(mktemp -d)"
+  trap cleanup EXIT
 
-  # Skip if already up to date
-  local current
-  current=$(current_version)
-  if [[ -n "$current" && "$current" == "$version" ]]; then
-    ok "Already up to date ($version)"
-    printf "\n"
-    exit 0
-  fi
-  [[ -n "$current" ]] \
-    && step "Updating: $current → $version" \
-    || step "Installing $version..."
+  download_source "$REF"
+  build_and_install "$REF"
+  step "Installed ref: ${REF} (${RESOLVED_REF_KIND})"
 
-  # Download
-  local archive="stg-${os}-${arch}.tar.gz"
-  local url="$GITHUB_BASE/$REPO/releases/download/$version/$archive"
-  local tmp
-  tmp=$(mktemp -d)
-  trap 'rm -rf "$tmp"' EXIT
-
-  step "Downloading..."
-  dim "$url"
-  curl -fsSL --progress-bar "$url" -o "$tmp/$archive" \
-    || die "Download failed. Does release $version exist? $GITHUB_BASE/$REPO/releases"
-
-  # Verify checksum if sha256sum is available
-  if command -v sha256sum &>/dev/null; then
-    local checksum_url="$GITHUB_BASE/$REPO/releases/download/$version/checksums.txt"
-    if curl -fsSL "$checksum_url" -o "$tmp/checksums.txt" 2>/dev/null; then
-      (cd "$tmp" && grep "$archive" checksums.txt | sha256sum --check --status) \
-        && ok "Checksum verified" \
-        || { warn "Checksum mismatch — aborting"; exit 1; }
-    fi
-  fi
-
-  step "Extracting..."
-  tar -xzf "$tmp/$archive" -C "$tmp"
-
-  # Install binary
-  mkdir -p "$INSTALL_DIR"
-  install -m755 "$tmp/$BINARY" "$INSTALL_DIR/$BINARY"
-  ok "Installed → $INSTALL_DIR/$BINARY"
-
-  # First-time setup hint
-  if [[ -z "$current" ]]; then
-    printf "\n"
-    step "Run once to finish setup:"
-    dim "  stg init"
-  fi
-
-  # PATH warning
   if ! echo ":${PATH}:" | grep -q ":${INSTALL_DIR}:"; then
     printf "\n"
     warn "$INSTALL_DIR is not in your PATH. Add to your shell profile:"
@@ -143,6 +215,19 @@ main() {
   else
     printf "\n"
     ok "Done — run: stg"
+  fi
+
+  printf "\n"
+  printf "  ${BOLD}Optional extras${RESET}\n"
+
+  if ask_tty "Copy shotgum-playground from source to ~/shotgum-playground and test stg?"; then
+    printf "\n"
+    install_playground_from_source
+  fi
+
+  if ask_tty "Install default project scripts in your user folder? (shotgum/star + shotgum/issue)"; then
+    printf "\n"
+    install_defaults_from_source
   fi
 
   printf "\n"

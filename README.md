@@ -4,23 +4,22 @@
 
 # ShotGum (stg)
 
-Um gerenciador de scripts TUI para o terminal, construído com o ecossistema [Charmbracelet](https://charm.sh/).
+Gerenciador de scripts para terminal com CLI e TUI, construído com o ecossistema [Charmbracelet](https://charm.sh/).
 
-Desenvolvido para quem acumula scripts espalhados por diretórios e não tem uma interface unificada para descobri-los, documentá-los ou executá-los. O `stg` cria um ponto de entrada único — com visual limpo e navegação por teclado — para scripts pessoais globais e scripts de projeto via `.shotgum.yaml`.
+O `stg` unifica scripts globais (usuário) e locais (projeto) em um catálogo navegável, com execução direta e execução interativa no terminal.
 
 ---
 
 ## Funcionalidades
 
-- **Interface TUI interativa** com navegação por teclado, filtragem e visual em pastéis suaves
-- **Configuração em camadas** — config global (`~/.config/shotgum/config.yaml`) mesclada com config de projeto (`.shotgum.yaml`) em tempo de execução
-- **Execução direta** sem abrir o TUI, com todos os argumentos e flags repassados ao script
-- **Execução interativa** — `i` suspende o TUI e entrega o TTY completo ao script (gum prompts, spinners, etc.)
-- **Dois tipos de script** — `script` (executado via `bash`) e `executable` (executado diretamente)
-- **Cascata de help flag** — cada script/categoria/config pode ter seu próprio flag de ajuda
-- **Preview de help** no painel direito, com scroll, ao navegar pelos scripts
-- **Badges visuais** — `[local]` e `[global]` indicam a origem de cada categoria e script
-- **Totalmente scriptável** — todos os comandos funcionam sem TUI para uso em automações
+- TUI com navegação por teclado e filtro
+- Merge de configuração global (`~/.config/shotgum/config.yaml`) + local (`.shotgum.yaml`)
+- Execução direta: `stg <categoria> <script> [args...]`
+- Execução interativa na TUI (stream de output + input ao processo)
+- Help preview assíncrono no painel direito
+- Cascata de `help_flag`: script -> categoria -> config -> `--help`
+- Resolução de executável com fallback (`script.executable`, `default_executable`, `/bin/sh`)
+- Badges de origem: `[local]` e `[user]`
 
 ---
 
@@ -32,29 +31,24 @@ Desenvolvido para quem acumula scripts espalhados por diretórios e não tem uma
 curl -fsSL https://raw.githubusercontent.com/brunoomariano/ShotGum-Toolchain/main/install.sh | bash
 ```
 
-Suporta Linux e macOS, x86_64 e arm64. Instala em `~/.local/bin` por padrão.
+O instalador baixa o código-fonte e compila localmente.
 
-Variáveis de ambiente opcionais:
+Variáveis opcionais:
 
 ```bash
-STG_VERSION=v0.2.0    # fixa uma versão específica
-STG_INSTALL_DIR=/usr/local/bin  # sobrescreve o diretório de instalação
+STG_REF=v0.2.0              # tag ou branch (default: main)
+STG_VERSION=v0.2.0          # alias compatível para STG_REF
+STG_INSTALL_DIR=~/.local/bin
 ```
+
+Pré-requisitos do instalador: `curl`, `tar`, `make`, `go`.
 
 ### A partir do código-fonte
 
-Requer Go 1.22+.
-
 ```bash
 git clone https://github.com/brunoomariano/ShotGum-Toolchain
-cd stg
-make install        # compila e instala em ~/.local/bin/stg
-```
-
-Ou, sem o Makefile:
-
-```bash
-go build -o ~/.local/bin/stg ./cmd/stg
+cd ShotGum-Toolchain
+make install
 ```
 
 ---
@@ -62,20 +56,19 @@ go build -o ~/.local/bin/stg ./cmd/stg
 ## Início rápido
 
 ```bash
-# 1. Inicializa a configuração global
+# 1) Inicializa config global
 stg init
 
-# 2. Registra um diretório como categoria
+# 2) Registra pasta como categoria
 stg add folder ~/meus-scripts --name dev --desc "Scripts de desenvolvimento"
 
-# 3. Registra scripts individualmente
-stg add script ~/meus-scripts/build.sh --category dev --desc "Faz o build do projeto"
-stg add script ~/meus-scripts/deploy.sh --category dev --desc "Deploy para produção"
+# 3) Registra script na categoria
+stg add script ~/meus-scripts/build.sh --category dev --name build --executable bash
 
-# 4. Lista tudo
+# 4) Lista
 stg list
 
-# 5. Abre o TUI interativo
+# 5) Abre TUI
 stg
 ```
 
@@ -83,194 +76,143 @@ stg
 
 ## Uso
 
-### Interface TUI
+### TUI
 
+```bash
+stg              # abre em categorias
+stg <categoria>  # abre já na lista de scripts da categoria
+stg --logs       # abre com footer de logs de execução
 ```
-stg              # Abre o TUI com lista de categorias
-stg <categoria>  # Abre o TUI já na lista de scripts da categoria
-```
 
-#### Atalhos de teclado
+### Atalhos principais
 
-| Tela                  | Tecla           | Ação                                    |
-|-----------------------|-----------------|-----------------------------------------|
-| Categorias            | `Enter`         | Entra na categoria                      |
-| Categorias            | `/`             | Filtra por nome                         |
-| Categorias            | `q`             | Sai                                     |
-| Scripts               | `Enter`         | Executa o script (saída capturada)      |
-| Scripts               | `i`             | Executa de forma interativa (TTY completo) |
-| Scripts               | `?`             | Executa com a help flag                 |
-| Scripts               | `tab`           | Foca o painel de detalhes (scroll do help) |
-| Scripts               | `/`             | Filtra por nome                         |
-| Scripts               | `Esc`           | Volta para categorias                   |
-| Scripts               | `q`             | Sai                                     |
-| Detalhe (focado)      | `↑` `↓`         | Rola o painel de help                   |
-| Detalhe (focado)      | `tab` / `Esc`   | Volta o foco para a lista               |
-| Saída                 | `↑` `↓`         | Rola linha a linha                      |
-| Saída                 | `PgUp` / `PgDn` | Rola página a página                    |
-| Saída                 | `Esc` / `q`     | Volta para scripts                      |
+| Tela | Tecla | Ação |
+|---|---|---|
+| Categorias | `Enter` | Entra na categoria |
+| Categorias | `/` | Filtra |
+| Categorias | `l` | Toggle logs |
+| Scripts | `Enter` | Executa script |
+| Scripts | `i` | Executa script (mesmo fluxo de `Enter`) |
+| Scripts | `?` | Executa script com `help_flag` resolvido |
+| Scripts | `tab` | Foca painel de detalhe |
+| Scripts | `esc` | Volta para categorias |
+| Saída | `↑` `↓` `PgUp` `PgDn` | Scroll |
+| Saída | `esc` | Volta para scripts (quando não estiver carregando) |
 
 ### Execução direta (sem TUI)
 
 ```bash
 stg <categoria> <script>
-stg <categoria> <script> [argumentos...]
+stg <categoria> <script> [args...]
 
-# Todos os argumentos e flags após o nome do script são repassados diretamente
-stg docker cleanup --force
+# args/flags são repassados ao script
 stg git sync --branch main --push
 ```
 
 ### Listagem
 
 ```bash
-stg list               # Lista todas as categorias (global + local)
-stg list <categoria>   # Lista os scripts de uma categoria
+stg list
+stg list <categoria>
 ```
 
-Exemplo de saída:
+Exemplo:
 
-```
+```text
 Categories
 ──────────────────────────────────────────────────
-  [local]  dev      Project dev scripts
-  [global] docker   Docker management scripts
-  [global] git      Git workflow helpers
+  [local] dev               Scripts do projeto
+  [user]  infra             Scripts pessoais
 ```
 
-### Adicionar categorias e scripts
+### Adição de categoria/script
 
 ```bash
-# Registra um diretório como categoria
 stg add folder <caminho> [--name <nome>] [--desc <descrição>]
-
-# Registra um script em uma categoria existente
-stg add script <caminho> --category <categoria> [--name <nome>] [--desc <descrição>] [--type script|executable]
+stg add script <caminho> --category <categoria> [--name <nome>] [--desc <descrição>] [--executable <binário>]
 ```
 
-O `stg add folder` detecta automaticamente arquivos `.sh` no diretório e exibe os comandos sugeridos para registrá-los.
-
-Se `--type` não for fornecido, o tipo é detectado automaticamente: arquivos `.sh` são registrados como `script`, demais arquivos como `executable`.
+`stg add` sempre grava na configuração global.
 
 ---
 
 ## Configuração
 
-### Configuração global — `~/.config/shotgum/config.yaml`
+### Global: `~/.config/shotgum/config.yaml`
 
 ```yaml
 version: "1"
 scripts_home: "~/.shotgum/scripts"
 help_flag: "--help"
+default_executable: "/bin/sh"
 
 categories:
   - name: docker
-    description: "Docker management scripts"
+    description: "Docker scripts"
     scripts_path: "~/scripts/docker"
-    help_flag: ""          # herda o global se vazio
-
-  - name: git
-    description: "Git workflow helpers"
-    scripts_path: "/custom/path/git-scripts"
-    help_flag: "-h"
+    help_flag: ""
 
 scripts:
   - name: cleanup
     category: docker
-    description: "Remove stopped containers and dangling images"
-    type: script           # "script" | "executable"
-    path: "cleanup.sh"     # relativo a scripts_path da categoria
+    description: "Cleanup"
+    executable: "bash"
+    path: "cleanup.sh"
     help_flag: ""
 ```
 
-### Configuração de projeto — `.shotgum.yaml`
-
-Coloque um arquivo `.shotgum.yaml` na raiz do projeto (pode ser commitado no git). O `stg` busca por ele percorrendo os diretórios acima do CWD, como o git faz com `.git`.
+### Local: `.shotgum.yaml`
 
 ```yaml
 version: "1"
 help_flag: "--help"
+default_executable: "bash"
 
 categories:
   - name: dev
-    description: "Project development scripts"
+    description: "Project scripts"
     scripts_path: "./scripts"
 
 scripts:
   - name: build
     category: dev
-    description: "Build the project"
-    type: script
-    path: "./scripts/build.sh"
-
-  - name: test
-    category: dev
-    description: "Run test suite"
-    type: script
-    path: "./scripts/test.sh"
+    description: "Build"
+    path: "./build.sh"
 ```
 
-### Hierarquia de configuração
+### Regras de resolução
 
-```
-~/.config/shotgum/config.yaml   ← global (scripts pessoais)
-.shotgum.yaml                   ← projeto (descoberto a partir do CWD)
-```
-
-Quando ambos existem, são **mesclados em tempo de execução**. Categorias e scripts locais têm precedência sobre os globais de mesmo nome. A origem de cada item é indicada no TUI e na saída do `stg list` com os badges `[local]` e `[global]`.
-
-### Cascata de help flag
-
-A flag de ajuda usada ao pressionar `?` no TUI (ou passada ao script via execução direta) é resolvida na seguinte ordem:
-
-```
-script.help_flag → category.help_flag → config.help_flag → "--help"
-```
-
-### Resolução de caminhos
-
-- Caminhos absolutos (`/` ou `~`) são usados diretamente
-- Caminhos relativos são resolvidos em relação a `category.scripts_path`
-- Se `scripts_path` estiver vazio, usa `scripts_home/<nome-da-categoria>/`
-- `~` e variáveis de ambiente (`$VAR`) são expandidas em todos os caminhos
+- Merge: local sobrepõe global
+- Path de script: absoluto -> `category.scripts_path` -> `scripts_home/<categoria>/`
+- Help flag: `script.help_flag` -> `category.help_flag` -> `config.help_flag` -> `--help`
+- Executável: `script.executable` -> `config.default_executable` (source) -> `global.default_executable` -> `/bin/sh`
 
 ---
 
 ## Estrutura do projeto
 
-```
-cmd/stg/main.go                 # Ponto de entrada
+```text
+cmd/stg/main.go
 internal/
-├── config/
-│   ├── schema.go               # Structs Config, Category, Script
-│   └── config.go               # LoadGlobal, LoadLocal, Save, EnsureDefault
-├── registry/
-│   └── registry.go             # Mescla configs, resolução de paths e flags
-├── runner/
-│   └── runner.go               # Execução de scripts (streaming e captura)
-├── tui/
-│   ├── app.go                  # Máquina de estados BubbleTea
-│   ├── views/
-│   │   ├── header.go           # Header animado com logo e versão
-│   │   ├── categories.go       # Vista de lista de categorias
-│   │   ├── scripts.go          # Vista de lista de scripts
-│   │   ├── detail.go           # Painel direito: info + viewport de help
-│   │   ├── confirm.go          # Vista de confirmação antes de executar
-│   │   └── output.go           # Vista de saída com scroll e spinner
-│   └── styles/
-│       └── styles.go           # Paleta de cores e estilos Lipgloss
-└── version/
-    └── version.go              # Versão injetada via ldflags na build
+  commands/       # comandos Cobra
+  config/         # schema + load/save + defaults
+  registry/       # merge e resolução
+  runner/         # execução direta/capturada/interativa
+  tui/
+    app.go        # state machine BubbleTea
+    views/        # header, lists, detail, output, confirm
+    styles/       # estilos lipgloss
+  version/        # version.Version (ldflags)
 ```
 
 ---
 
-## Dependências
+## Desenvolvimento
 
-| Biblioteca | Uso |
-|---|---|
-| [charmbracelet/bubbletea](https://github.com/charmbracelet/bubbletea) | Framework TUI (Elm Architecture) |
-| [charmbracelet/bubbles](https://github.com/charmbracelet/bubbles) | Componentes: list, viewport, spinner |
-| [charmbracelet/lipgloss](https://github.com/charmbracelet/lipgloss) | Estilos e layout terminal |
-| [spf13/cobra](https://github.com/spf13/cobra) | CLI e parsing de argumentos |
-| [gopkg.in/yaml.v3](https://pkg.go.dev/gopkg.in/yaml.v3) | Leitura e escrita de configs YAML |
+```bash
+make build
+make test
+make ci
+```
+
+Workflow de CI: `.github/workflows/ci.yml` (push em `main` e pull requests).

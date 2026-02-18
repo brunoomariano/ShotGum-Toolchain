@@ -1,81 +1,82 @@
-BINARY  := stg
-MODULE  := github.com/shotgum/stg
-CMD     := ./cmd/stg
+BINARY   := stg
+MODULE   := github.com/brunoomariano/ShotGum-Toolchain
+CMD      := ./cmd/stg
 
-GO      := go
-GOFLAGS :=
+GO       := go
+GOFLAGS  :=
+SRC      := src
+BUILDDIR := build
 
-# Inject version from the nearest git tag, e.g. v0.1.0.
-# Falls back to "dev" when there are no tags yet.
-VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
-LDFLAGS := -s -w -X '$(MODULE)/internal/version.Version=$(VERSION)'
+# Read version directly from internal/version/version.go (single source of truth).
+VERSION := $(shell sed -n 's/^const DefaultVersion = "\(.*\)"/\1/p' $(SRC)/internal/version/version.go | head -n1)
+LDFLAGS := -s -w
 
 COVERAGE_MIN := 85
 COVERAGE_OUT := coverage.out
 
 .PHONY: build run snapshot clean tidy fmt vet lint install uninstall test cover ci help
 
-build: ## Build the binary in the current directory
-	$(GO) build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(BINARY) $(CMD)
+build: ## Build the binary into ./build/
+	@mkdir -p $(CURDIR)/$(BUILDDIR)
+	$(GO) -C $(SRC) build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(CURDIR)/$(BUILDDIR)/$(BINARY) $(CMD)
 
 run: build ## Build and run the TUI
-	./$(BINARY)
+	./$(BUILDDIR)/$(BINARY)
 
 snapshot: ## Build release binaries for all platforms into ./dist
-	@mkdir -p dist
+	@mkdir -p $(CURDIR)/dist
 	@for platform in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do \
 		os=$$(echo $$platform | cut -d/ -f1); \
 		arch=$$(echo $$platform | cut -d/ -f2); \
 		ext=$$([ "$$os" = "windows" ] && echo ".exe" || echo ""); \
-		out="dist/$(BINARY)-$$os-$$arch$$ext"; \
+		out="$(CURDIR)/dist/$(BINARY)-$$os-$$arch$$ext"; \
 		printf "  → $$out\n"; \
-		GOOS=$$os GOARCH=$$arch $(GO) build \
+		GOOS=$$os GOARCH=$$arch $(GO) -C $(SRC) build \
 			-ldflags="$(LDFLAGS)" \
 			-o "$$out" $(CMD); \
 	done
 	@printf "  ✓ dist/ ready ($(VERSION))\n"
 
 install: build ## Install the binary to ~/.local/bin
-	install -Dm755 $(BINARY) ~/.local/bin/$(BINARY)
+	install -Dm755 $(CURDIR)/$(BUILDDIR)/$(BINARY) ~/.local/bin/$(BINARY)
 
 uninstall: ## Remove the binary from ~/.local/bin
 	rm -f ~/.local/bin/$(BINARY)
 
 tidy: ## Tidy go.mod and go.sum
-	$(GO) mod tidy
+	$(GO) -C $(SRC) mod tidy
 
 fmt: ## Format all Go source files
-	$(GO) fmt ./...
+	$(GO) -C $(SRC) fmt ./...
 
 vet: ## Run go vet
-	$(GO) vet ./...
+	$(GO) -C $(SRC) vet ./...
 
 lint: fmt vet ## Run fmt and vet
 
 test: ## Run tests with race detector
-	$(GO) test -race -count=1 ./...
+	$(GO) -C $(SRC) test -race -count=1 ./...
 
 cover: ## Run tests and generate coverage report
-	$(GO) test -race -count=1 -coverprofile=$(COVERAGE_OUT) -covermode=atomic ./...
-	$(GO) tool cover -func=$(COVERAGE_OUT) | tail -5
+	$(GO) -C $(SRC) test -race -count=1 -coverprofile=$(CURDIR)/$(COVERAGE_OUT) -covermode=atomic ./...
+	$(GO) -C $(SRC) tool cover -func=$(CURDIR)/$(COVERAGE_OUT) | tail -5
 
 ci: ## Format check, vet, tests and coverage >= COVERAGE_MIN%
 	@echo "  → Format check..."
-	@test -z "$$(gofmt -l .)" && echo "  ✓ Format OK" || { echo "  ✗ Run 'make fmt' to fix"; exit 1; }
+	@test -z "$$(gofmt -l ./$(SRC))" && echo "  ✓ Format OK" || { echo "  ✗ Run 'make fmt' to fix"; exit 1; }
 	@echo "  → Vet..."
-	@$(GO) vet ./... && echo "  ✓ Vet OK"
+	@$(GO) -C $(SRC) vet ./... && echo "  ✓ Vet OK"
 	@echo "  → Tests..."
-	@$(GO) test -race -count=1 -coverprofile=$(COVERAGE_OUT) -covermode=atomic ./...
+	@$(GO) -C $(SRC) test -race -count=1 -coverprofile=$(CURDIR)/$(COVERAGE_OUT) -covermode=atomic ./...
 	@echo "  → Coverage (min $(COVERAGE_MIN)%)..."
-	@$(GO) tool cover -func=$(COVERAGE_OUT) | awk \
+	@$(GO) -C $(SRC) tool cover -func=$(CURDIR)/$(COVERAGE_OUT) | awk \
 	  '/^total:/{gsub(/%/,"",$$3); pct=$$3+0; \
 	   if(pct<$(COVERAGE_MIN)){printf "  ✗ %.1f%% < $(COVERAGE_MIN)%%\n",pct; exit 1} \
 	   else {printf "  ✓ %.1f%%\n",pct}}'
 	@echo "  ✓ CI passed"
 
-clean: ## Remove the local binary and dist/
-	rm -f $(BINARY)
-	rm -rf dist/
+clean: ## Remove ./build/ and ./dist/
+	rm -rf $(CURDIR)/$(BUILDDIR) $(CURDIR)/dist/
 
 help: ## Show this help message
 	@grep -E '^[a-zA-Z_-]+:.*##' $(MAKEFILE_LIST) \

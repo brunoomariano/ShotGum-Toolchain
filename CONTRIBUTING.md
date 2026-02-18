@@ -4,25 +4,25 @@
 
 - Go 1.22+
 - `make` (GNU Make)
-- `bash` (for test scripts)
+- `bash` (for script-based tests)
 
 ## Building
 
 ```bash
 make build          # produces ./stg
-make run            # build + run in testenv/
-make snapshot       # GoReleaser snapshot (no publish)
+make run            # build + run the TUI
+make snapshot       # cross-build local binaries into ./dist
 ```
 
 ## Testing
 
 ```bash
-make test           # all tests with race detector
+make test           # tests with race detector
 make cover          # tests + coverage summary
-make ci             # fmt-check + vet + tests + coverage ≥ 85%
+make ci             # fmt-check + vet + tests + coverage >= 85%
 ```
 
-The minimum accepted total coverage is **85%** (currently ≥ 90%). `make ci` fails if this threshold is not met.
+The minimum accepted total coverage is **85%**.
 
 ---
 
@@ -30,41 +30,42 @@ The minimum accepted total coverage is **85%** (currently ≥ 90%). `make ci` fa
 
 ### Formatting
 
-All code must pass `gofmt`. Run `make fmt` before committing. `make ci` enforces this.
+All code must pass `gofmt`. Run `make fmt` before committing.
 
 ### Language version
 
-Go 1.22 — use the builtin `max()` and `min()` functions; do **not** import helpers for them.
+Go 1.22 — use builtin `max()` and `min()` when appropriate.
 
 ### Package structure
 
-```
-cmd/stg/          — main entry point (thin, no logic)
+```text
+cmd/stg/          — main entry point
 internal/
-  commands/       — Cobra subcommands (add, list, init, run, root)
-  config/         — YAML config load/save + schema
-  registry/       — merged global+local config view
-  runner/         — script execution (Run, CaptureRun, CaptureRunForPreview)
-  tui/            — BubbleTea application (app.go)
-  tui/styles/     — lipgloss palette + Badge / TypeTag helpers
-  tui/views/      — individual view models (categories, scripts, detail, confirm, output, header)
-  version/        — version string injected at build time via ldflags
+  commands/       — Cobra commands (root, add, init, list, run)
+  config/         — YAML schema + load/save + defaults
+  registry/       — merged global/local view + resolution
+  runner/         — Run/CaptureRun/StartInteractive
+  tui/            — BubbleTea app (app.go)
+  tui/styles/     — lipgloss palette + badges
+  tui/views/      — categories, scripts, detail, output, confirm, header
+  version/        — version string injected with ldflags
 ```
 
 ### Naming
 
-- Exported types end in `Model` (e.g. `DetailModel`, `OutputModel`).
-- Message types end in `Msg` (e.g. `ScriptDoneMsg`, `ConfirmRunMsg`).
-- Constructor functions start with `New` (e.g. `NewOutputModel`, `NewConfirmModel`).
-- Cobra command factories end in `Cmd` (e.g. `addFolderCmd`, `addScriptCmd`).
+- Exported types end with `Model` where applicable.
+- Message types end with `Msg`.
+- Constructors start with `New`.
+- Cobra factory funcs end with `Cmd`.
 
-### TUI architecture (BubbleTea)
+### TUI architecture (current)
 
-- State machine: `stateCategories → stateScripts → stateConfirm → stateOutput`.
-- Two-panel layout: left panel (list) + right panel (`DetailModel`), header on top.
-- Views return **raw content** (no border). The border is applied once inside `renderTwoPanel`.
-- `syncDetail()` is a **value receiver** returning `AppModel`; always call as `m = m.syncDetail()`.
-- `scriptList` must be initialized in `NewAppModel` — a zero-value `list.Model` has a nil delegate and panics on `SetSize`.
+- Active state flow: `stateCategories -> stateScripts -> stateOutput`.
+- `stateConfirm` exists in code but is not in the active navigation flow.
+- `syncDetail()` returns `(AppModel, tea.Cmd)`; update call sites accordingly.
+- `scriptList` must always be initialized with a valid delegate.
+- Execution in TUI prioritizes interactive mode via `runner.StartInteractive()` with fallback to captured execution.
+- `esc` is blocked in output while execution is still loading.
 
 ### Colors (lipgloss)
 
@@ -75,13 +76,12 @@ internal/
 | Gray | `#6B7280` |
 | Red | `#F87171` |
 
-Do not add new color constants without updating `internal/tui/styles/styles.go`.
+If you introduce new visual tokens, update `internal/tui/styles/styles.go` and tests.
 
 ### Error handling
 
-- Return errors; do not `log.Fatal` or `os.Exit` inside packages.
-- Format errors with `fmt.Errorf("context: %w", err)` for wrapping.
-- Only validate at system boundaries (user input, file I/O, external commands).
+- Return errors instead of exiting inside packages.
+- Wrap errors with context (`fmt.Errorf("context: %w", err)`).
 
 ---
 
@@ -89,34 +89,22 @@ Do not add new color constants without updating `internal/tui/styles/styles.go`.
 
 ### General rules
 
-- Every test function **must have a doc comment** that explains what is being tested and which code path or branch it exercises. Example:
+- Use stdlib `testing` package.
+- Prefer table-driven tests for repeated scenarios.
+- Avoid `t.Parallel()` in tests that mutate CWD or environment.
 
-  ```go
-  // TestOutputModel_Update_SpinnerTick_Loading verifies that a spinner.TickMsg while
-  // loading advances the spinner animation and returns a follow-up tick command.
-  func TestOutputModel_Update_SpinnerTick_Loading(t *testing.T) { … }
-  ```
-
-- Use the standard library only (`testing`, `os`, `path/filepath`, …). No third-party assertion libraries.
-- Use table-driven tests (`[]struct{ … }`) when testing multiple similar inputs.
-- Do **not** call `t.Parallel()` in tests that change the CWD — it causes races.
-
-### Isolation
-
-Tests that touch the filesystem or `HOME` must be fully isolated:
+### Isolation for FS/HOME tests
 
 ```go
-tmpdir := t.TempDir()          // cleaned up automatically
-t.Setenv("HOME", tmpdir)       // restored automatically by t.Cleanup
+tmpdir := t.TempDir()
+t.Setenv("HOME", tmpdir)
 
 origDir, _ := os.Getwd()
-t.Cleanup(func() { os.Chdir(origDir) })
-os.Chdir(tmpdir)
+t.Cleanup(func() { _ = os.Chdir(origDir) })
+_ = os.Chdir(tmpdir)
 ```
 
 ### Testing Cobra commands
-
-Execute subcommands in isolation via `cmd.Execute()`:
 
 ```go
 cmd := addScriptCmd()
@@ -128,17 +116,16 @@ err := cmd.Execute()
 
 ### Capturing stdout
 
-Use `os.Pipe` to capture output from functions that write directly to `os.Stdout`:
-
 ```go
 func captureStdout(f func()) string {
     old := os.Stdout
     r, w, _ := os.Pipe()
     os.Stdout = w
     f()
-    w.Close()
+    _ = w.Close()
+
     var buf bytes.Buffer
-    io.Copy(&buf, r)
+    _, _ = io.Copy(&buf, r)
     os.Stdout = old
     return buf.String()
 }
@@ -146,52 +133,22 @@ func captureStdout(f func()) string {
 
 ### BubbleTea model tests
 
-Update models by calling their `Update` method directly, then inspect state:
-
 ```go
 m := NewOutputModel("test", 80, 24)
 m2, _ := m.Update(ScriptDoneMsg{Output: "ok", Err: nil})
-if m2.loading { t.Error("…") }
+if m2.IsLoading() { t.Error("expected not loading") }
 ```
 
-To invoke a `tea.Cmd` and receive the message:
-
-```go
-func collectMsg(cmd tea.Cmd) tea.Msg {
-    if cmd == nil { return nil }
-    return cmd()
-}
-```
-
-### Stripping ANSI codes
-
-All view assertions should strip ANSI escape codes before using `strings.Contains`:
-
-```go
-// stripANSI is defined in internal/tui/views/header_test.go (package views)
-stripped := stripANSI(view)
-if !strings.Contains(stripped, "expected text") { … }
-```
-
-### Coverage target
-
-All PRs must pass `make ci`, which enforces ≥ 85% total coverage.
+Use ANSI stripping helpers in view assertions where needed.
 
 ---
 
 ## Commit & PR conventions
 
-- Commit messages: imperative mood, present tense. Focus on *why*, not *what*.
-- One logical change per commit.
-- PRs must pass `make ci` (format + vet + tests + coverage).
+- Commit message in imperative mood.
+- Keep one logical change per commit.
+- PR must pass `make ci`.
 
-## Release process
+## CI workflow
 
-Releases are triggered by pushing a `v*` tag:
-
-```bash
-git tag v0.1.0
-git push origin v0.1.0
-```
-
-The GitHub Actions workflow (`.github/workflows/release.yml`) builds cross-platform binaries and publishes a GitHub Release automatically.
+The workflow in `.github/workflows/ci.yml` runs `make ci` on push to `main` and on pull requests.

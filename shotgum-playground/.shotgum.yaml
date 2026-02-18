@@ -1,0 +1,86 @@
+version: "1"
+default_executable: bash
+
+categories:
+  - name: dev
+    description: Local project development tools
+    scripts_path: ./scripts
+    help_flag: --help
+
+  - name: games
+    description: Interactive games and demos
+    scripts_path: ./scripts
+    help_flag: --help
+
+scripts:
+  # ─── dev ──────────────────────────────────────────────────────────────────
+  - name: build
+    category: dev
+    description: Build the project binary
+    type: script
+    path: build.sh
+
+  - name: test
+    category: dev
+    description: Run the test suite
+    type: script
+    path: test.sh
+
+  - name: lint
+    category: dev
+    description: Run linter and format checks
+    type: script
+    path: lint.sh
+
+  - name: clean
+    category: dev
+    description: Remove build artifacts and cache
+    type: script
+    path: clean.sh
+
+  - name: deploy
+    category: dev
+    description: Deploy to staging environment
+    type: script
+    path: deploy.sh
+
+  - name: logs
+    category: dev
+    description: Tail recent application logs
+    type: script
+    path: logs.sh
+
+  - name: env
+    category: dev
+    description: Print current environment variables
+    type: script
+    path: env.sh
+    help_flag: --show-me
+
+  - name: status
+    category: dev
+    description: Check service health and status
+    type: script
+    path: status.sh
+    help_flag: --show-me
+
+  # ─── games ────────────────────────────────────────────────────────────────
+  - name: forca-py
+    category: games
+    description: "Jogo da Forca em Python puro — adivinhe a palavra letra a letra"
+    type: executable
+    path: forca.py
+    executable: python3
+
+  - name: forca-gum
+    category: games
+    description: "Jogo da Forca com Bash + gum — versão com interface estilizada"
+    type: script
+    path: forca.sh
+
+  - name: quiz
+    category: games
+    description: "Quiz de trivia sobre tecnologia — 12 perguntas de múltipla escolha"
+    type: executable
+    path: quiz.py
+    executable: python3
