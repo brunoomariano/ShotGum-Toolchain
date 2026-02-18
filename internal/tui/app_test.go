@@ -3,12 +3,15 @@ package tui
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/config"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/registry"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/runner"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/tui/views"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/shotgum/stg/internal/config"
-	"github.com/shotgum/stg/internal/registry"
-	"github.com/shotgum/stg/internal/tui/views"
 )
 
 // loadTestReg creates a temp HOME, writes cfg if provided, sets CWD to tmpdir,
@@ -105,8 +108,9 @@ func TestNewAppModel_WithCategories(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewAppModel() error: %v", err)
 	}
-	if len(m.catList.Items()) != 1 {
-		t.Errorf("catList should have 1 item, got %d", len(m.catList.Items()))
+	// 1 real category + 1 section header ("User") = 2 items
+	if len(m.catList.Items()) != 2 {
+		t.Errorf("catList should have 2 items (1 entry + 1 section header), got %d", len(m.catList.Items()))
 	}
 }
 
@@ -139,18 +143,6 @@ func TestAppModel_Update_WindowSize_InOutputState(t *testing.T) {
 	_ = cmd // should not panic
 }
 
-// ── Update: interactiveDoneMsg ─────────────────────────────────────────────
-
-func TestAppModel_Update_InteractiveDone(t *testing.T) {
-	reg := loadTestReg(t, nil)
-	m, _ := NewAppModel(reg)
-	m2i, _ := m.Update(interactiveDoneMsg{err: nil})
-	m2 := m2i.(AppModel)
-	if m2.state != stateScripts {
-		t.Errorf("after interactiveDone, state should be stateScripts, got %d", m2.state)
-	}
-}
-
 // ── Update: DetailHelpMsg ──────────────────────────────────────────────────
 
 func TestAppModel_Update_DetailHelpMsg(t *testing.T) {
@@ -174,7 +166,7 @@ func TestAppModel_Update_ConfirmRun_WithScript(t *testing.T) {
 	cfg := &config.Config{
 		Version:    "1",
 		Categories: []config.Category{{Name: "tools"}},
-		Scripts:    []config.Script{{Name: "build", Category: "tools", Type: "script", Path: "/dev/null"}},
+		Scripts:    []config.Script{{Name: "build", Category: "tools", Executable: "/bin/sh", Path: "/dev/null"}},
 	}
 	reg := loadTestReg(t, cfg)
 	m, _ := NewAppModel(reg)
@@ -185,8 +177,8 @@ func TestAppModel_Update_ConfirmRun_WithScript(t *testing.T) {
 	m.currentScript = entry
 	m2i, _ := m.Update(views.ConfirmRunMsg{ExtraArgs: []string{}})
 	m2 := m2i.(AppModel)
-	if m2.state != stateOutput {
-		t.Errorf("after ConfirmRun, state should be stateOutput, got %d", m2.state)
+	if m2.state != stateCategories {
+		t.Errorf("ConfirmRunMsg should be ignored in current flow, got state %d", m2.state)
 	}
 }
 
@@ -198,8 +190,8 @@ func TestAppModel_Update_ConfirmCancel(t *testing.T) {
 	m.state = stateConfirm
 	m2i, _ := m.Update(views.ConfirmCancelMsg{})
 	m2 := m2i.(AppModel)
-	if m2.state != stateScripts {
-		t.Errorf("after ConfirmCancel, state should be stateScripts, got %d", m2.state)
+	if m2.state != stateConfirm {
+		t.Errorf("ConfirmCancelMsg should be ignored in current flow, got state %d", m2.state)
 	}
 }
 
@@ -363,7 +355,7 @@ func TestAppModel_Scripts_Enter_WithItem(t *testing.T) {
 	cfg := &config.Config{
 		Version:    "1",
 		Categories: []config.Category{{Name: "tools"}},
-		Scripts:    []config.Script{{Name: "build", Category: "tools", Type: "script", Path: "/dev/null"}},
+		Scripts:    []config.Script{{Name: "build", Category: "tools", Executable: "/bin/sh", Path: "/dev/null"}},
 	}
 	reg := loadTestReg(t, cfg)
 	m := appWithSize(t, reg, 80, 24)
@@ -371,10 +363,13 @@ func TestAppModel_Scripts_Enter_WithItem(t *testing.T) {
 	scripts := reg.GetScripts("tools")
 	m.scriptList = views.NewScriptList("tools", scripts, 80, 20)
 
-	m2i, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m2i, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m2 := m2i.(AppModel)
-	if m2.state != stateConfirm {
-		t.Errorf("Enter with script should navigate to stateConfirm, got %d", m2.state)
+	if m2.state != stateOutput {
+		t.Errorf("Enter with script should go to stateOutput, got %d", m2.state)
+	}
+	if cmd == nil {
+		t.Error("Enter with script should return non-nil run cmd")
 	}
 }
 
@@ -392,7 +387,7 @@ func TestAppModel_Scripts_Interactive_WithItem(t *testing.T) {
 	cfg := &config.Config{
 		Version:    "1",
 		Categories: []config.Category{{Name: "tools"}},
-		Scripts:    []config.Script{{Name: "build", Category: "tools", Type: "script", Path: "/bin/echo"}},
+		Scripts:    []config.Script{{Name: "build", Category: "tools", Executable: "/bin/sh", Path: "/bin/echo"}},
 	}
 	reg := loadTestReg(t, cfg)
 	m := appWithSize(t, reg, 80, 24)
@@ -400,10 +395,13 @@ func TestAppModel_Scripts_Interactive_WithItem(t *testing.T) {
 	scripts := reg.GetScripts("tools")
 	m.scriptList = views.NewScriptList("tools", scripts, 80, 20)
 
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
-	// cmd should be a tea.ExecProcess command (non-nil)
+	m2i, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'i'}})
+	m2 := m2i.(AppModel)
+	if m2.state != stateOutput {
+		t.Errorf("'i' with script should go to stateOutput, got %d", m2.state)
+	}
 	if cmd == nil {
-		t.Error("'i' with a script should return a non-nil ExecProcess cmd")
+		t.Error("'i' with a script should return a non-nil run cmd")
 	}
 }
 
@@ -419,7 +417,7 @@ func TestAppModel_Scripts_Help_WithItem(t *testing.T) {
 	cfg := &config.Config{
 		Version:    "1",
 		Categories: []config.Category{{Name: "tools"}},
-		Scripts:    []config.Script{{Name: "build", Category: "tools", Type: "script", Path: "/dev/null"}},
+		Scripts:    []config.Script{{Name: "build", Category: "tools", Executable: "/bin/sh", Path: "/dev/null"}},
 	}
 	reg := loadTestReg(t, cfg)
 	m := appWithSize(t, reg, 80, 24)
@@ -451,37 +449,34 @@ func TestAppModel_Confirm_Esc(t *testing.T) {
 	reg := loadTestReg(t, nil)
 	m, _ := NewAppModel(reg)
 	m.state = stateConfirm
-	// Esc in confirm → ConfirmCancelMsg is returned via cmd
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	if cmd == nil {
-		t.Error("Esc in stateConfirm should return a non-nil cmd")
+	if cmd != nil {
+		t.Error("Esc in stateConfirm should be ignored in current flow")
 	}
 }
 
 // ── updateOutput ───────────────────────────────────────────────────────────
 
-func TestAppModel_Output_Q_Loading(t *testing.T) {
+func TestAppModel_Output_Q_Loading_Quits(t *testing.T) {
 	reg := loadTestReg(t, nil)
 	m, _ := NewAppModel(reg)
 	m.state = stateOutput
 	m.output = views.NewOutputModel("test", 80, 24) // loading=true
-	m2i, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
-	m2 := m2i.(AppModel)
-	if m2.state != stateOutput {
-		t.Error("q while loading should stay in stateOutput")
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	if cmd == nil {
+		t.Error("q should return quit cmd in stateOutput, even while loading")
 	}
 }
 
-func TestAppModel_Output_Q_NotLoading(t *testing.T) {
+func TestAppModel_Output_Q_NotLoading_Quits(t *testing.T) {
 	reg := loadTestReg(t, nil)
 	m, _ := NewAppModel(reg)
 	m.state = stateOutput
 	m.output = views.NewOutputModel("test", 80, 24)
 	m.output, _ = m.output.Update(views.ScriptDoneMsg{Output: "done"})
-	m2i, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
-	m2 := m2i.(AppModel)
-	if m2.state != stateScripts {
-		t.Errorf("q when not loading should go to stateScripts, got %d", m2.state)
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	if cmd == nil {
+		t.Error("q should return quit cmd in stateOutput")
 	}
 }
 
@@ -587,6 +582,52 @@ func TestAppModel_RenderTwoPanel_DetailFocused(t *testing.T) {
 	_ = view // should not panic; border colors differ from non-focused
 }
 
+func TestAppModel_ToggleExecutionLogs(t *testing.T) {
+	reg := loadTestReg(t, nil)
+	m := appWithSize(t, reg, 80, 24)
+
+	m2i, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	m2 := m2i.(AppModel)
+	if !m2.showExecutionLogs {
+		t.Error("'l' should enable execution logs footer")
+	}
+	if len(m2.executionLogs) == 0 {
+		t.Error("enabling logs should register an execution event")
+	}
+
+	m3i, _ := m2.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	m3 := m3i.(AppModel)
+	if m3.showExecutionLogs {
+		t.Error("second 'l' should disable execution logs footer")
+	}
+}
+
+func TestAppModel_View_WithExecutionLogsFooter(t *testing.T) {
+	reg := loadTestReg(t, nil)
+	m := appWithSize(t, reg, 80, 24)
+	m.SetExecutionLogsVisible(true)
+	view := m.View()
+	if !strings.Contains(view, "execution logs") {
+		t.Error("view should include execution logs footer when enabled")
+	}
+}
+
+func TestAppModel_View_ExecutionLogsFooter_DoesNotMutateEntries(t *testing.T) {
+	reg := loadTestReg(t, nil)
+	m := appWithSize(t, reg, 80, 24)
+	m.SetExecutionLogsVisible(true)
+
+	_ = m.View()
+	_ = m.View()
+
+	if len(m.executionLogs) != 1 {
+		t.Fatalf("execution logs should keep a single entry after repeated renders, got %d", len(m.executionLogs))
+	}
+	if strings.Count(m.executionLogs[0], "[INFO]") != 1 {
+		t.Fatalf("log entry should not be rewritten on render, got %q", m.executionLogs[0])
+	}
+}
+
 // ── syncDetail ─────────────────────────────────────────────────────────────
 
 func TestAppModel_SyncDetail_CategoriesState_NoItem(t *testing.T) {
@@ -621,7 +662,7 @@ func TestAppModel_SyncDetail_ScriptsState_WithItem(t *testing.T) {
 	cfg := &config.Config{
 		Version:    "1",
 		Categories: []config.Category{{Name: "tools"}},
-		Scripts:    []config.Script{{Name: "build", Category: "tools", Type: "script", Path: "/dev/null"}},
+		Scripts:    []config.Script{{Name: "build", Category: "tools", Executable: "/bin/sh", Path: "/dev/null"}},
 	}
 	reg := loadTestReg(t, cfg)
 	m, _ := NewAppModel(reg)
@@ -658,4 +699,187 @@ func TestAppModel_Update_NonKey_ScriptsState(t *testing.T) {
 	m.state = stateScripts
 	m2i, _ := m.Update(struct{}{})
 	_ = m2i
+}
+
+func TestAppModel_Update_InteractiveChunkMsg_AppendsOutput(t *testing.T) {
+	reg := loadTestReg(t, nil)
+	m, _ := NewAppModel(reg)
+	m.state = stateOutput
+	m.output = views.NewOutputModel("test", 80, 24)
+	m.output.EnableInteractive()
+
+	m2i, _ := m.Update(interactiveChunkMsg{text: "hello from chunk"})
+	m2 := m2i.(AppModel)
+
+	view := m2.output.View()
+	if !strings.Contains(view, "hello from chunk") {
+		t.Fatalf("output view should contain streamed chunk, got: %q", view)
+	}
+}
+
+func TestAppModel_Update_InteractiveDoneMsg_FinishesOutput(t *testing.T) {
+	reg := loadTestReg(t, nil)
+	m, _ := NewAppModel(reg)
+	m.state = stateOutput
+	m.output = views.NewOutputModel("test", 80, 24)
+	m.output.EnableInteractive()
+
+	m2i, _ := m.Update(interactiveDoneMsg{err: nil})
+	m2 := m2i.(AppModel)
+	if m2.output.IsLoading() {
+		t.Fatal("output should stop loading after interactiveDoneMsg")
+	}
+}
+
+func TestKeyMsgToInput_Mappings(t *testing.T) {
+	tests := []struct {
+		name string
+		msg  tea.KeyMsg
+		want string
+		ok   bool
+	}{
+		{name: "runes", msg: tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}}, want: "a", ok: true},
+		{name: "enter", msg: tea.KeyMsg{Type: tea.KeyEnter}, want: "\n", ok: true},
+		{name: "space", msg: tea.KeyMsg{Type: tea.KeySpace}, want: " ", ok: true},
+		{name: "tab", msg: tea.KeyMsg{Type: tea.KeyTab}, want: "\t", ok: true},
+		{name: "backspace", msg: tea.KeyMsg{Type: tea.KeyBackspace}, want: string([]byte{127}), ok: true},
+		{name: "up", msg: tea.KeyMsg{Type: tea.KeyUp}, want: "\x1b[A", ok: true},
+		{name: "down", msg: tea.KeyMsg{Type: tea.KeyDown}, want: "\x1b[B", ok: true},
+		{name: "left", msg: tea.KeyMsg{Type: tea.KeyLeft}, want: "\x1b[D", ok: true},
+		{name: "right", msg: tea.KeyMsg{Type: tea.KeyRight}, want: "\x1b[C", ok: true},
+		{name: "ctrl+c", msg: tea.KeyMsg{Type: tea.KeyCtrlC}, want: string([]byte{3}), ok: true},
+		{name: "unsupported", msg: tea.KeyMsg{Type: tea.KeyEsc}, want: "", ok: false},
+	}
+
+	for _, tc := range tests {
+		got, ok := keyMsgToInput(tc.msg)
+		if ok != tc.ok {
+			t.Fatalf("%s: ok=%v want %v", tc.name, ok, tc.ok)
+		}
+		if string(got) != tc.want {
+			t.Fatalf("%s: got %q want %q", tc.name, string(got), tc.want)
+		}
+	}
+}
+
+func TestSanitizeInteractiveChunk_RemovesOSC(t *testing.T) {
+	in := "\x1b]11;rgb:1a1a/1b1b/2626\x1b\\  +---+"
+	got := sanitizeInteractiveChunk(in)
+	if strings.Contains(got, "]11;rgb:") {
+		t.Fatalf("sanitizeInteractiveChunk should remove OSC payload, got: %q", got)
+	}
+	if !strings.Contains(got, "+---+") {
+		t.Fatalf("sanitizeInteractiveChunk should preserve regular output, got: %q", got)
+	}
+}
+
+func TestSanitizeInteractiveChunk_RemovesLeakedOSCText(t *testing.T) {
+	in := "]11;rgb:1a1a/1b1b/2626\\  |   |"
+	got := sanitizeInteractiveChunk(in)
+	if strings.Contains(got, "]11;rgb:") {
+		t.Fatalf("sanitizeInteractiveChunk should remove leaked OSC text, got: %q", got)
+	}
+	if !strings.Contains(got, "|   |") {
+		t.Fatalf("sanitizeInteractiveChunk should preserve regular output, got: %q", got)
+	}
+}
+
+func TestReadInteractiveChunkCmd_AndWaitDone(t *testing.T) {
+	tmpdir := t.TempDir()
+	script := filepath.Join(tmpdir, "hello.sh")
+	if err := os.WriteFile(script, []byte("#!/usr/bin/env bash\necho hello-live"), 0755); err != nil {
+		t.Fatalf("write script: %v", err)
+	}
+
+	cfg := &config.Config{
+		Version:    "1",
+		Categories: []config.Category{{Name: "tools"}},
+		Scripts: []config.Script{{
+			Name:       "hello",
+			Category:   "tools",
+			Executable: "/bin/bash",
+			Path:       script,
+		}},
+	}
+	reg := loadTestReg(t, cfg)
+	entry, err := reg.FindScript("tools", "hello")
+	if err != nil {
+		t.Fatalf("FindScript: %v", err)
+	}
+
+	session, err := runner.StartInteractive(*entry, nil, reg)
+	if err != nil {
+		t.Fatalf("StartInteractive: %v", err)
+	}
+
+	msg := readInteractiveChunkCmd(session)()
+	chunk, ok := msg.(interactiveChunkMsg)
+	if !ok {
+		t.Fatalf("readInteractiveChunkCmd returned %T", msg)
+	}
+	if strings.TrimSpace(chunk.text) == "" {
+		t.Fatalf("expected non-empty interactive chunk")
+	}
+
+	doneMsg := waitInteractiveDoneCmd(session)()
+	done, ok := doneMsg.(interactiveDoneMsg)
+	if !ok {
+		t.Fatalf("waitInteractiveDoneCmd returned %T", doneMsg)
+	}
+	if done.err != nil {
+		t.Fatalf("unexpected done error: %v", done.err)
+	}
+}
+
+func TestAppModel_UpdateOutput_ForwardsInteractiveInput(t *testing.T) {
+	tmpdir := t.TempDir()
+	script := filepath.Join(tmpdir, "read.sh")
+	content := "#!/usr/bin/env bash\nread -r x\necho typed:$x"
+	if err := os.WriteFile(script, []byte(content), 0755); err != nil {
+		t.Fatalf("write script: %v", err)
+	}
+
+	cfg := &config.Config{
+		Version:    "1",
+		Categories: []config.Category{{Name: "tools"}},
+		Scripts: []config.Script{{
+			Name:       "reader",
+			Category:   "tools",
+			Executable: "/bin/bash",
+			Path:       script,
+		}},
+	}
+	reg := loadTestReg(t, cfg)
+	entry, err := reg.FindScript("tools", "reader")
+	if err != nil {
+		t.Fatalf("FindScript: %v", err)
+	}
+
+	session, err := runner.StartInteractive(*entry, nil, reg)
+	if err != nil {
+		t.Fatalf("StartInteractive: %v", err)
+	}
+
+	m, err := NewAppModel(reg)
+	if err != nil {
+		t.Fatalf("NewAppModel: %v", err)
+	}
+	m.state = stateOutput
+	m.output = views.NewOutputModel("reader", 80, 24)
+	m.output.EnableInteractive()
+	m.liveSession = session
+
+	m2i, _ := m.updateOutput(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	m2 := m2i.(AppModel)
+	if !m2.output.IsLoading() {
+		t.Fatalf("output should still be loading during interactive run")
+	}
+
+	_, _ = m2.updateOutput(tea.KeyMsg{Type: tea.KeyEnter})
+
+	select {
+	case <-session.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting interactive process after forwarded input")
+	}
 }
