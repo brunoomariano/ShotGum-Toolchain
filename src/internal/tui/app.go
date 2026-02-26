@@ -10,13 +10,12 @@ package tui
 
 import (
 	"fmt"
-	"io"
-	"regexp"
+	"os"
+	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/brunoomariano/ShotGum-Toolchain/internal/registry"
-	"github.com/brunoomariano/ShotGum-Toolchain/internal/runner"
 	"github.com/brunoomariano/ShotGum-Toolchain/internal/tui/styles"
 	"github.com/brunoomariano/ShotGum-Toolchain/internal/tui/views"
 	"github.com/charmbracelet/bubbles/list"
@@ -36,20 +35,7 @@ const (
 	stateOutput
 )
 
-type interactiveChunkMsg struct {
-	text string
-	eof  bool
-}
-
-type interactiveDoneMsg struct {
-	err error
-}
-
 var (
-	// PTY control-sequence filters — compiled once at startup.
-	oscSequenceRe = regexp.MustCompile(`\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)`)
-	oscLeakRe     = regexp.MustCompile(`\]1[01];rgb:[0-9a-fA-F/]+\\?`)
-
 	// Panel border styles — active panel uses the purple accent; inactive uses subtle.
 	panelBorderActive   = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(styles.Purple)
 	panelBorderInactive = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(styles.Subtle)
@@ -78,7 +64,6 @@ type AppModel struct {
 	currentCategory *registry.CategoryEntry
 	// currentScript holds the active script when running or confirming
 	currentScript *registry.ScriptEntry
-	liveSession   *runner.InteractiveSession
 
 	showExecutionLogs bool
 	executionLogs     []string
@@ -200,28 +185,6 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.appendExecutionLog("INFO", fmt.Sprintf("script %q finished successfully", m.output.ScriptName()))
 		}
 		return m, cmd
-
-	case interactiveChunkMsg:
-		if msg.text != "" {
-			m.output.AppendChunk(sanitizeInteractiveChunk(msg.text))
-			if strings.Contains(msg.text, "[read error]") {
-				m.appendExecutionLog("ERROR", strings.TrimSpace(msg.text))
-			}
-		}
-		if m.liveSession != nil && !msg.eof {
-			return m, readInteractiveChunkCmd(m.liveSession)
-		}
-		return m, nil
-
-	case interactiveDoneMsg:
-		m.output.Finish(msg.err)
-		if msg.err != nil {
-			m.appendExecutionLog("ERROR", fmt.Sprintf("script %q finished with error: %v", m.output.ScriptName(), msg.err))
-		} else {
-			m.appendExecutionLog("INFO", fmt.Sprintf("script %q finished successfully", m.output.ScriptName()))
-		}
-		m.liveSession = nil
-		return m, nil
 	}
 
 	// Delegate non-key messages to the active list
@@ -350,41 +313,23 @@ func (m AppModel) runScript(entry registry.ScriptEntry, args []string) (tea.Mode
 	} else {
 		m.appendExecutionLog("INFO", fmt.Sprintf("starting script %q with args %q", entry.Name, strings.Join(args, " ")))
 	}
-	m.output = views.NewOutputModel(entry.Name, m.width, m.height)
-	m.output.EnableInteractive()
-	m.state = stateOutput
 
-	session, err := runner.StartInteractive(entry, args, m.reg)
-	if err != nil {
-		// Fallback to captured execution if interactive bootstrap fails.
-		m.appendExecutionLog("WARN", fmt.Sprintf("interactive session unavailable for %q, using captured mode", entry.Name))
-		runCmd := views.RunScriptCmd(entry, args, m.reg)
-		initCmd := m.output.Init()
-		return m, tea.Batch(initCmd, runCmd)
-	}
+	path := m.reg.ResolveScriptPath(entry)
+	executable := m.reg.ResolveExecutable(entry)
+	cmd := exec.Command(executable, append([]string{path}, args...)...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
 
-	m.liveSession = session
-	initCmd := m.output.Init()
-	return m, tea.Batch(
-		initCmd,
-		readInteractiveChunkCmd(session),
-		waitInteractiveDoneCmd(session),
-	)
+	execCmd := tea.ExecProcess(cmd, func(err error) tea.Msg {
+		_ = err
+		return tea.QuitMsg{}
+	})
+
+	return m, execCmd
 }
 
 func (m AppModel) updateOutput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m.liveSession != nil && m.output.IsLoading() {
-		switch msg.String() {
-		case "esc":
-			return m, nil
-		}
-
-		if input, ok := keyMsgToInput(msg); ok {
-			_ = m.liveSession.SendInput(input)
-			return m, nil
-		}
-	}
-
 	switch msg.String() {
 	case "esc":
 		if m.output.IsLoading() {
@@ -401,64 +346,6 @@ func (m AppModel) updateOutput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	updated, cmd := m.output.Update(msg)
 	m.output = updated
 	return m, cmd
-}
-
-func readInteractiveChunkCmd(session *runner.InteractiveSession) tea.Cmd {
-	return func() tea.Msg {
-		buf := make([]byte, 4096)
-		n, err := session.ReadChunk(buf)
-		if n > 0 {
-			return interactiveChunkMsg{text: string(buf[:n])}
-		}
-		if err != nil {
-			if err == io.EOF {
-				return interactiveChunkMsg{eof: true}
-			}
-			return interactiveChunkMsg{text: fmt.Sprintf("\n[read error] %v\n", err), eof: true}
-		}
-		return interactiveChunkMsg{}
-	}
-}
-
-func waitInteractiveDoneCmd(session *runner.InteractiveSession) tea.Cmd {
-	return func() tea.Msg {
-		return interactiveDoneMsg{err: <-session.Done()}
-	}
-}
-
-func keyMsgToInput(msg tea.KeyMsg) ([]byte, bool) {
-	switch msg.Type {
-	case tea.KeyRunes:
-		return []byte(string(msg.Runes)), true
-	case tea.KeyEnter:
-		return []byte("\n"), true
-	case tea.KeySpace:
-		return []byte(" "), true
-	case tea.KeyTab:
-		return []byte("\t"), true
-	case tea.KeyBackspace:
-		return []byte{127}, true
-	case tea.KeyUp:
-		return []byte("\x1b[A"), true
-	case tea.KeyDown:
-		return []byte("\x1b[B"), true
-	case tea.KeyLeft:
-		return []byte("\x1b[D"), true
-	case tea.KeyRight:
-		return []byte("\x1b[C"), true
-	case tea.KeyCtrlC:
-		return []byte{3}, true
-	default:
-		return nil, false
-	}
-}
-
-func sanitizeInteractiveChunk(text string) string {
-	// Remove OSC control sequences from PTY output (e.g. "]11;rgb:..."),
-	// which can leak into the viewport when tools probe terminal colors.
-	clean := oscSequenceRe.ReplaceAllString(text, "")
-	clean = oscLeakRe.ReplaceAllString(clean, "")
-	return clean
 }
 
 func (m *AppModel) appendExecutionLog(level, text string) {
