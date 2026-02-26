@@ -3,7 +3,7 @@ package version
 
 // DefaultVersion is the single source of truth for the project version.
 // To bump the project version, change only this constant.
-const DefaultVersion = "0.2.0"
+const DefaultVersion = "0.3.0"
 
 // Version is what the app renders and what Cobra reports via --version.
 // It intentionally tracks DefaultVersion exactly.
