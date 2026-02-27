@@ -14,7 +14,7 @@ import (
 //	· ° o O
 const bubbleIcon = "· ° o O"
 
-// HeaderModel renders the top banner with project metadata.
+// HeaderModel renders the Header Container (app title/subtitle/version).
 type HeaderModel struct {
 	width int
 }
@@ -26,8 +26,13 @@ func NewHeaderModel() HeaderModel {
 
 func (m HeaderModel) Init() tea.Cmd { return nil }
 
+func (m *HeaderModel) SetWidth(w int) {
+	m.width = w
+}
+
 func (m HeaderModel) Update(msg tea.Msg) (HeaderModel, tea.Cmd) {
-	if msg, ok := msg.(tea.WindowSizeMsg); ok {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
 		m.width = msg.Width
 	}
 	return m, nil
@@ -45,22 +50,21 @@ const (
 func (m HeaderModel) View() string {
 	artStyle := styles.TitleStyle // bold + purple
 
+	versionText := "v" + strings.TrimPrefix(version.Version, "v")
 	line1 := artStyle.Render(artRow1)
 	line2 := artStyle.Render(artRow2)
 	line3 := artStyle.Render(artRow3)
 
 	bubble := styles.TitleStyle.Render(bubbleIcon) // "· ° o O"  7 cols
 
-	ver := styles.DescStyle.Render("v" + strings.TrimPrefix(version.Version, "v"))
-	sep := styles.DescStyle.Render("  ·  ")
-	repoLink := lipgloss.NewStyle().Foreground(styles.Teal).Underline(true).Render(version.RepoURL)
-	rightInfo := ver + sep + repoLink
+	ver := styles.DescStyle.Render(versionText)
 
 	subtitle := lipgloss.NewStyle().Bold(true).Foreground(styles.Teal).Render("Script Manager")
+	subtitleLine := subtitle + styles.DescStyle.Render("  ·  ") + ver
 
 	innerW := m.width - 2
-	if innerW < 20 {
-		innerW = 20
+	if innerW < 10 {
+		innerW = 10
 	}
 
 	leftRow1 := bubble + "  " + line1
@@ -71,23 +75,17 @@ func (m HeaderModel) View() string {
 	// Narrow terminals: avoid ASCII-art overflow and keep essential metadata visible.
 	if innerW < lipgloss.Width(leftRow1) {
 		title := styles.TitleStyle.Render("ShotGum")
-		rows = append(rows, title, subtitle, ver)
+		rows = append(rows, title, subtitleLine)
 	} else {
-		// Full header: keep banner; include repo link only when there is room.
-		gap1 := innerW - lipgloss.Width(leftRow1) - lipgloss.Width(rightInfo)
-		if gap1 >= 1 {
-			rows = append(rows, leftRow1+strings.Repeat(" ", gap1)+rightInfo)
-		} else {
-			rows = append(rows, leftRow1)
-			rows = append(rows, pad+ver)
-		}
-		rows = append(rows, pad+line2, pad+line3, pad+subtitle)
+		// Full header: keep banner; version sits next to the subtitle line.
+		rows = append(rows, leftRow1)
+		rows = append(rows, pad+line2, pad+line3, pad+subtitleLine)
 	}
 	content := strings.Join(rows, "\n")
 
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(styles.Purple).
+		BorderForeground(styles.Subtle).
 		Width(innerW).
 		Render(content)
 }

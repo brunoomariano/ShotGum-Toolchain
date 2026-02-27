@@ -11,7 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// ScriptItem wraps a ScriptEntry for bubbles/list.
+// ScriptItem wraps a ScriptEntry for the Navigation Container list.
 type ScriptItem struct {
 	entry registry.ScriptEntry
 }
@@ -66,10 +66,7 @@ func NewScriptList(categoryName string, entries []registry.ScriptEntry, w, h int
 	for _, e := range entries {
 		if e.Source != currentSource {
 			currentSource = e.Source
-			label := "Local"
-			if e.Source == "user" {
-				label = "User"
-			}
+			label := sourceLabel(e.Source)
 			items = append(items, SectionHeaderItem{label: label})
 		}
 		items = append(items, ScriptItem{entry: e})

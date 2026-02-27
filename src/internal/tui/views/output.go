@@ -1,5 +1,6 @@
 // Package views contains the BubbleTea sub-models that render individual UI
-// panels: category list, script list, detail, confirm dialog, output, and header.
+// containers: Header Container, Navigation Container (categories/scripts),
+// Info Container (detail/help), confirm dialog, and output.
 package views
 
 import (

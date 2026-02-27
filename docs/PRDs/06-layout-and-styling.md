@@ -4,8 +4,9 @@
 
 Layout principal em `AppModel.View()`:
 
-- header
-- dois painéis (lista + detalhe)
+- Header Container (nome do app, subtitle, versão)
+- Navigation Container (lista de categorias/scripts)
+- Info Container (detalhes/help)
 - help bar
 - footer opcional de logs
 
@@ -29,27 +30,24 @@ Badge de origem:
 
 ## Dimensões (`panelDims`)
 
-```text
-leftW  = max((w-4)*2/5, 10)
-rightW = max((w-4)-leftW, 10)
-panelH = max(h-6, 5)
-```
+- `leftW` e `rightW` são calculadas para ocupar toda a largura disponível.
+- `panelH` desconta a altura do Header Container e do footer (se ativo).
 
 ## Componentes Visuais
 
-### Header (`views/header.go`)
+### Header Container (`views/header.go`)
 
 - título `SHOTGUM`
 - versão (`v` + `version.Version`)
 - link de issues
 
-### Listas (`views/categories.go` e `views/scripts.go`)
+### Navigation Container (`views/categories.go` e `views/scripts.go`)
 
 - usam `bubbles/list`
 - agrupamento por origem com `SectionHeaderItem` (`Local` / `User`)
 - cursor inicia no primeiro item real (pula header de seção)
 
-### Painel de detalhe (`views/detail.go`)
+### Info Container (`views/detail.go`)
 
 Modo categoria:
 

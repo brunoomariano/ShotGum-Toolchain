@@ -35,7 +35,7 @@ func sectionHeaderLine(label string, width int) string {
 	return styles.SectionHeaderStyle.Render(prefix + strings.Repeat("─", remaining))
 }
 
-// CategoryItem wraps a CategoryEntry for bubbles/list.
+// CategoryItem wraps a CategoryEntry for the Navigation Container list.
 type CategoryItem struct {
 	entry registry.CategoryEntry
 }
@@ -92,10 +92,7 @@ func NewCategoryList(entries []registry.CategoryEntry, w, h int) list.Model {
 	for _, e := range entries {
 		if e.Source != currentSource {
 			currentSource = e.Source
-			label := "Local"
-			if e.Source == "user" {
-				label = "User"
-			}
+			label := sourceLabel(e.Source)
 			items = append(items, SectionHeaderItem{label: label})
 		}
 		items = append(items, CategoryItem{entry: e})

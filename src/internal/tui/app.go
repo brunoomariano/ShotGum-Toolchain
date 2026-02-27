@@ -1,11 +1,15 @@
 // Package tui implements the ShotGum interactive terminal UI using BubbleTea.
 // The root AppModel is a state machine with four states:
 //
-//	stateCategories → stateScripts → stateOutput
+//	stateCategories → stateScripts → stateOutput → stateSettings
 //
-// A two-panel layout (category/script list on the left, detail on the right) is
-// rendered by renderTwoPanel. An optional rolling execution-log footer can be
-// toggled with the [l] key.
+// The main layout uses three named containers:
+//   - Header Container: app title/subtitle/version (top-left)
+//   - Navigation Container: categories/scripts list (left)
+//   - Info Container: details/help (right)
+//
+// The two-panel layout (Navigation + Info) is rendered by renderTwoPanel.
+// An optional rolling execution-log footer can be toggled with the [l] key.
 package tui
 
 import (
@@ -15,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/config"
 	"github.com/brunoomariano/ShotGum-Toolchain/internal/registry"
 	"github.com/brunoomariano/ShotGum-Toolchain/internal/tui/styles"
 	"github.com/brunoomariano/ShotGum-Toolchain/internal/tui/views"
@@ -33,6 +38,7 @@ const (
 	stateScripts
 	stateConfirm
 	stateOutput
+	stateSettings
 )
 
 var (
@@ -56,10 +62,11 @@ type AppModel struct {
 	header        views.HeaderModel
 	catList       list.Model
 	scriptList    list.Model
+	settingsList  list.Model
 	detail        views.DetailModel
 	confirm       views.ConfirmModel
 	output        views.OutputModel
-	detailFocused bool // when true, ↑/↓ scroll the detail viewport instead of the list
+	detailFocused bool // when true, ↑/↓ scroll the Info Container viewport instead of the list
 	// currentCategory holds the active category when navigating into scripts/output
 	currentCategory *registry.CategoryEntry
 	// currentScript holds the active script when running or confirming
@@ -69,13 +76,16 @@ type AppModel struct {
 	executionLogs     []string
 }
 
-// panelDims returns the content widths and panel height for the two-panel layout.
-// It uses the rendered header/footer heights to avoid vertical overflow.
+// panelDims returns the content widths and panel height for the two-panel layout
+// (Navigation Container + Info Container). It uses the rendered Header Container
+// and footer heights to avoid vertical overflow.
 func (m AppModel) panelDims() (leftW, rightW, panelH int) {
-	leftW = max((m.width-4)*2/5, 10)
-	rightW = max((m.width-4)-leftW, 10)
+	leftW = max(m.width*2/5, 10)
+	rightW = max(m.width-leftW, 10)
 
-	headerH := lipgloss.Height(m.header.View())
+	header := m.header
+	header.SetWidth(leftW)
+	headerH := lipgloss.Height(header.View())
 	footerH := 0
 	if m.showExecutionLogs {
 		footerH = lipgloss.Height(m.renderExecutionLogsFooter())
@@ -91,13 +101,15 @@ func (m AppModel) panelDims() (leftW, rightW, panelH int) {
 func NewAppModel(reg *registry.Registry) (AppModel, error) {
 	cats := reg.GetCategories()
 	catList := views.NewCategoryList(cats, 80, 20)
+	settingsList := views.NewSettingsList(buildSettingsItems(reg), 80, 20)
 
 	m := AppModel{
-		state:      stateCategories,
-		reg:        reg,
-		header:     views.NewHeaderModel(),
-		catList:    catList,
-		scriptList: views.NewScriptList("", []registry.ScriptEntry{}, 80, 20),
+		state:        stateCategories,
+		reg:          reg,
+		header:       views.NewHeaderModel(),
+		catList:      catList,
+		scriptList:   views.NewScriptList("", []registry.ScriptEntry{}, 80, 20),
+		settingsList: settingsList,
 	}
 	m, _ = m.syncDetail() // categories state: no async help cmd needed at startup
 	return m, nil
@@ -115,7 +127,7 @@ func (m AppModel) Init() tea.Cmd {
 	return m.header.Init()
 }
 
-// syncDetail refreshes the right-panel detail model to match the currently
+// syncDetail refreshes the Info Container to match the currently
 // selected list item. For stateScripts it also returns a Cmd that fetches the
 // script's --help output asynchronously.
 func (m AppModel) syncDetail() (AppModel, tea.Cmd) {
@@ -129,6 +141,9 @@ func (m AppModel) syncDetail() (AppModel, tea.Cmd) {
 		if item, ok := m.scriptList.SelectedItem().(views.ScriptItem); ok {
 			entry := item.Entry()
 			m.detail.SetScript(&entry, m.reg)
+			if entry.Source == "make" {
+				return m, nil
+			}
 			_, rightW, _ := m.panelDims()
 			return m, views.LoadScriptHelpCmd(entry, m.reg, rightW)
 		}
@@ -137,25 +152,28 @@ func (m AppModel) syncDetail() (AppModel, tea.Cmd) {
 }
 
 func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var headerCmd tea.Cmd
+	m.header, headerCmd = m.header.Update(msg)
+
+	var cmd tea.Cmd
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.header, _ = m.header.Update(msg)
 		leftW, rightW, panelH := m.panelDims()
 		m.catList.SetSize(leftW, panelH)
 		m.scriptList.SetSize(leftW, panelH)
+		m.settingsList.SetSize(leftW, panelH)
 		m.detail.SetSize(rightW, panelH)
 		if m.state == stateOutput {
-			updated, cmd := m.output.Update(msg)
+			var updated views.OutputModel
+			updated, cmd = m.output.Update(msg)
 			m.output = updated
-			return m, cmd
 		}
-		return m, nil
 
 	case views.DetailHelpMsg:
 		m.detail.SetHelpText(msg.ScriptName, msg.Text)
-		return m, nil
 
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -164,49 +182,70 @@ func (m AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.showExecutionLogs {
 				m.appendExecutionLog("INFO", "execution log footer enabled")
 			}
-			return m, nil
+			break
+		case "s", "S":
+			if m.state != stateOutput {
+				m.state = stateSettings
+				m.detailFocused = false
+				leftW, _, panelH := m.panelDims()
+				m.settingsList.SetSize(leftW, panelH)
+			}
+			break
 		}
 
 		switch m.state {
 		case stateCategories:
-			return m.updateCategories(msg)
+			m, cmd = m.updateCategories(msg)
 		case stateScripts:
-			return m.updateScripts(msg)
+			m, cmd = m.updateScripts(msg)
+		case stateSettings:
+			m, cmd = m.updateSettings(msg)
 		case stateOutput:
-			return m.updateOutput(msg)
+			m, cmd = m.updateOutput(msg)
 		}
 
 	case views.ScriptDoneMsg:
-		updated, cmd := m.output.Update(msg)
+		var updated views.OutputModel
+		updated, cmd = m.output.Update(msg)
 		m.output = updated
 		if msg.Err != nil {
 			m.appendExecutionLog("ERROR", fmt.Sprintf("script %q finished with error: %v", m.output.ScriptName(), msg.Err))
 		} else {
 			m.appendExecutionLog("INFO", fmt.Sprintf("script %q finished successfully", m.output.ScriptName()))
 		}
-		return m, cmd
+
+	default:
+		// Delegate non-key messages to the active list
+		switch m.state {
+		case stateCategories:
+			var updated list.Model
+			updated, cmd = m.catList.Update(msg)
+			m.catList = updated
+		case stateScripts:
+			var updated list.Model
+			updated, cmd = m.scriptList.Update(msg)
+			m.scriptList = updated
+		case stateSettings:
+			var updated list.Model
+			updated, cmd = m.settingsList.Update(msg)
+			m.settingsList = updated
+		case stateOutput:
+			var updated views.OutputModel
+			updated, cmd = m.output.Update(msg)
+			m.output = updated
+		}
 	}
 
-	// Delegate non-key messages to the active list
-	switch m.state {
-	case stateCategories:
-		updated, cmd := m.catList.Update(msg)
-		m.catList = updated
-		return m, cmd
-	case stateScripts:
-		updated, cmd := m.scriptList.Update(msg)
-		m.scriptList = updated
-		return m, cmd
-	case stateOutput:
-		updated, cmd := m.output.Update(msg)
-		m.output = updated
+	if headerCmd == nil {
 		return m, cmd
 	}
-
-	return m, nil
+	if cmd == nil {
+		return m, headerCmd
+	}
+	return m, tea.Batch(headerCmd, cmd)
 }
 
-func (m AppModel) updateCategories(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m AppModel) updateCategories(msg tea.KeyMsg) (AppModel, tea.Cmd) {
 	switch msg.String() {
 	case "q", "ctrl+c":
 		return m, tea.Quit
@@ -243,7 +282,7 @@ func (m AppModel) updateCategories(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m AppModel) updateScripts(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m AppModel) updateScripts(msg tea.KeyMsg) (AppModel, tea.Cmd) {
 	// When the detail panel has focus, scroll keys go to its viewport.
 	if m.detailFocused {
 		switch msg.String() {
@@ -286,6 +325,9 @@ func (m AppModel) updateScripts(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			break
 		}
 		entry := item.Entry()
+		if entry.Source == "make" {
+			return m, nil
+		}
 		helpFlag := m.reg.ResolveHelpFlag(entry)
 		return m.runScript(entry, []string{helpFlag})
 	}
@@ -306,7 +348,73 @@ func (m AppModel) updateScripts(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmd, helpCmd)
 }
 
-func (m AppModel) runScript(entry registry.ScriptEntry, args []string) (tea.Model, tea.Cmd) {
+func (m AppModel) updateSettings(msg tea.KeyMsg) (AppModel, tea.Cmd) {
+	switch msg.String() {
+	case "q", "ctrl+c":
+		return m, tea.Quit
+	case "esc":
+		m.state = stateCategories
+		return m, nil
+	case "enter", " ":
+		item, ok := m.settingsList.SelectedItem().(views.SettingItem)
+		if !ok {
+			break
+		}
+		switch item.Key {
+		case settingMakefileImport:
+			enabled := !config.EffectiveMakefileImport(m.reg.GlobalConfig())
+			if err := saveMakefileSettings(
+				enabled,
+				config.EffectiveMakefileImportMode(m.reg.GlobalConfig()),
+				config.EffectiveMakefileImportSource(m.reg.GlobalConfig()),
+			); err != nil {
+				m.appendExecutionLog("ERROR", fmt.Sprintf("saving settings: %v", err))
+				return m, nil
+			}
+			m.reloadRegistry()
+		case settingMakefileImportSource:
+			source := config.EffectiveMakefileImportSource(m.reg.GlobalConfig())
+			if source == "make_qp" {
+				source = "parser"
+			} else {
+				source = "make_qp"
+			}
+			if err := saveMakefileSettings(
+				config.EffectiveMakefileImport(m.reg.GlobalConfig()),
+				config.EffectiveMakefileImportMode(m.reg.GlobalConfig()),
+				source,
+			); err != nil {
+				m.appendExecutionLog("ERROR", fmt.Sprintf("saving settings: %v", err))
+				return m, nil
+			}
+			m.reloadRegistry()
+		case settingMakefileImportMode:
+			mode := config.EffectiveMakefileImportMode(m.reg.GlobalConfig())
+			if mode == "all" {
+				mode = "includes_only"
+			} else {
+				mode = "all"
+			}
+			if err := saveMakefileSettings(
+				config.EffectiveMakefileImport(m.reg.GlobalConfig()),
+				mode,
+				config.EffectiveMakefileImportSource(m.reg.GlobalConfig()),
+			); err != nil {
+				m.appendExecutionLog("ERROR", fmt.Sprintf("saving settings: %v", err))
+				return m, nil
+			}
+			m.reloadRegistry()
+		}
+		m.settingsList = views.NewSettingsList(buildSettingsItems(m.reg), m.settingsList.Width(), m.settingsList.Height())
+		return m, nil
+	}
+
+	updated, cmd := m.settingsList.Update(msg)
+	m.settingsList = updated
+	return m, cmd
+}
+
+func (m AppModel) runScript(entry registry.ScriptEntry, args []string) (AppModel, tea.Cmd) {
 	m.currentScript = &entry
 	if len(args) == 0 {
 		m.appendExecutionLog("INFO", fmt.Sprintf("starting script %q", entry.Name))
@@ -314,9 +422,8 @@ func (m AppModel) runScript(entry registry.ScriptEntry, args []string) (tea.Mode
 		m.appendExecutionLog("INFO", fmt.Sprintf("starting script %q with args %q", entry.Name, strings.Join(args, " ")))
 	}
 
-	path := m.reg.ResolveScriptPath(entry)
-	executable := m.reg.ResolveExecutable(entry)
-	cmd := exec.Command(executable, append([]string{path}, args...)...)
+	executable, baseArgs := m.reg.ResolveInvocation(entry)
+	cmd := exec.Command(executable, append(baseArgs, args...)...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
@@ -329,7 +436,7 @@ func (m AppModel) runScript(entry registry.ScriptEntry, args []string) (tea.Mode
 	return m, execCmd
 }
 
-func (m AppModel) updateOutput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m AppModel) updateOutput(msg tea.KeyMsg) (AppModel, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		if m.output.IsLoading() {
@@ -385,25 +492,38 @@ func (m AppModel) renderExecutionLogsFooter() string {
 	return logFooterStyle.MaxWidth(max(m.width-2, 0)).Render(title + "\n" + strings.Join(rendered, "\n"))
 }
 
-// renderTwoPanel assembles the header + side-by-side panels + help bar.
+// renderTwoPanel assembles the Header Container + side-by-side Navigation/Info Containers + help bar.
 func (m AppModel) renderTwoPanel(leftContent, helpText string) string {
 	leftW, rightW, panelH := m.panelDims()
+	return m.renderTwoPanelSized(leftContent, m.detail.View(rightW), helpText, leftW, rightW, panelH)
+}
 
+func (m AppModel) renderTwoPanelWithRight(leftContent, rightContent, helpText string) string {
+	leftW, rightW, panelH := m.panelDims()
+	return m.renderTwoPanelSized(leftContent, rightContent, helpText, leftW, rightW, panelH)
+}
+
+func (m AppModel) renderTwoPanelSized(leftContent, rightContent, helpText string, leftW, rightW, panelH int) string {
 	leftBorder, rightBorder := panelBorderActive, panelBorderInactive
 	if m.detailFocused {
 		leftBorder, rightBorder = panelBorderInactive, panelBorderActive
 	}
 
 	leftPanel := leftBorder.Width(leftW).Height(panelH).Render(leftContent)
-	rightPanel := rightBorder.Width(rightW).Height(panelH).Render(m.detail.View(rightW))
+	rightPanel := rightBorder.Width(rightW).Height(panelH).Render(rightContent)
 
-	panels := lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, rightPanel)
+	header := m.header
+	header.SetWidth(leftW)
+	headerView := header.View()
 	help := styles.HelpStyle.Render(helpText)
+	leftColumn := headerView + "\n" + leftPanel + "\n" + help
+	rightColumn := rightPanel + "\n" + styles.HelpStyle.Render("")
+	columns := lipgloss.JoinHorizontal(lipgloss.Top, leftColumn, rightColumn)
 	footer := m.renderExecutionLogsFooter()
 	if footer == "" {
-		return m.header.View() + "\n" + panels + "\n" + help
+		return columns
 	}
-	return m.header.View() + "\n" + panels + "\n" + help + "\n" + footer
+	return columns + "\n" + footer
 }
 
 func (m AppModel) View() string {
@@ -411,14 +531,16 @@ func (m AppModel) View() string {
 	case stateCategories:
 		return m.renderTwoPanel(
 			m.catList.View(),
-			"enter: open  •  /: filter  •  l: logs  •  q: quit",
+			"enter: open  •  /: filter  •  s: settings  •  l: logs  •  q: quit",
 		)
 	case stateScripts:
-		helpText := "enter: run  •  ?: help  •  tab: scroll help  •  l: logs  •  esc: back  •  q: quit"
+		helpText := "enter: run  •  ?: help  •  tab: scroll help  •  s: settings  •  l: logs  •  esc: back  •  q: quit"
 		if m.detailFocused {
 			helpText = "↑/↓: scroll  •  tab/esc: back to list  •  l: logs"
 		}
 		return m.renderTwoPanel(m.scriptList.View(), helpText)
+	case stateSettings:
+		return m.renderTwoPanelWithRight(m.settingsList.View(), m.renderSettingsDetail(), "enter: toggle  •  esc: back  •  q: quit")
 	case stateOutput:
 		base := m.output.View()
 		footer := m.renderExecutionLogsFooter()
@@ -428,6 +550,27 @@ func (m AppModel) View() string {
 		return base + "\n" + footer
 	}
 	return ""
+}
+
+func (m AppModel) renderSettingsDetail() string {
+	item, ok := m.settingsList.SelectedItem().(views.SettingItem)
+	if !ok {
+		return styles.DescStyle.Render("Select a setting to see details.")
+	}
+	_, rightW, _ := m.panelDims()
+	title := styles.TitleStyle.Render(item.TitleText)
+	sep := styles.DescStyle.Render(strings.Repeat("─", max(rightW, 10)))
+	desc := styles.DescStyle.Render(item.DescText)
+	value := styles.StatusStyle.Render(item.Value)
+	body := strings.Join([]string{
+		title,
+		sep,
+		"",
+		desc,
+		"",
+		"  " + styles.DescStyle.Render("Current") + "  " + value,
+	}, "\n")
+	return body
 }
 
 // Start launches the full TUI application.

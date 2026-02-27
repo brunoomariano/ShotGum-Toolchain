@@ -41,10 +41,10 @@ Se `StartInteractive` falhar:
 - usa `views.RunScriptCmd` -> `runner.CaptureRun()`
 - output completo vem de `CombinedOutput()`
 
-### 4. Preview de help no painel direito
+### 4. Preview de help no Info Container
 
 - `views.LoadScriptHelpCmd()` chama `runner.CaptureRunForPreview()`
-- injeta `TERM=xterm-256color` e `COLUMNS=<largura painel>`
+- injeta `TERM=xterm-256color` e `COLUMNS=<largura do Info Container>`
 
 ## Erros e Exit Code
 

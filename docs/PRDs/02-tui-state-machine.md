@@ -41,7 +41,7 @@ Observação: `stateConfirm` existe no enum, mas não participa do fluxo ativo a
 | `Enter` | Executa script (modo interativo no output) |
 | `i` | Mesmo comportamento de `Enter` |
 | `?` | Executa script com `help_flag` resolvido |
-| `tab` | Foca painel de detalhe (scroll do viewport) |
+| `tab` | Foca Info Container (scroll do viewport) |
 | `esc` | Volta para categorias |
 | `l` | Toggle logs |
 | `q` / `Ctrl+C` | Sair |
@@ -78,6 +78,6 @@ flowchart TD
 | R-TUI-03 | Execução no TUI tenta sessão interativa primeiro (`StartInteractive`) |
 | R-TUI-04 | Em falha de sessão interativa, há fallback para execução capturada |
 | R-TUI-05 | `syncDetail()` em `stateScripts` dispara `LoadScriptHelpCmd` assíncrono |
-| R-TUI-06 | `tab` alterna foco para scroll do painel direito |
+| R-TUI-06 | `tab` alterna foco para scroll do Info Container |
 | R-TUI-07 | `esc` em output loading é bloqueado |
 | R-TUI-08 | Footer de logs é alternado por `l` ou `--logs` no comando raiz |

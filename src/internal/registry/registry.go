@@ -6,10 +6,12 @@ package registry
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 
 	"github.com/brunoomariano/ShotGum-Toolchain/internal/config"
+	"github.com/brunoomariano/ShotGum-Toolchain/internal/makefile"
 )
 
 // CategoryEntry is a category with its source (user/local).
@@ -28,6 +30,9 @@ type ScriptEntry struct {
 type Registry struct {
 	global *config.Config
 	local  *config.Config
+
+	dynamicCategories []config.Category
+	dynamicScripts    []config.Script
 }
 
 // Load loads and merges global + local configs.
@@ -40,7 +45,9 @@ func Load() (*Registry, error) {
 	if err != nil {
 		return nil, fmt.Errorf("loading local config: %w", err)
 	}
-	return &Registry{global: global, local: local}, nil
+	reg := &Registry{global: global, local: local}
+	reg.loadMakefileTargets()
+	return reg, nil
 }
 
 // GetCategories returns merged categories. Local entries override global ones with the same name.
@@ -53,6 +60,14 @@ func (r *Registry) GetCategories() []CategoryEntry {
 		for _, c := range r.local.Categories {
 			seen[c.Name] = true
 			result = append(result, CategoryEntry{Category: c, Source: "local"})
+		}
+	}
+
+	// Dynamic (makefile)
+	for _, c := range r.dynamicCategories {
+		if !seen[c.Name] {
+			seen[c.Name] = true
+			result = append(result, CategoryEntry{Category: c, Source: "make"})
 		}
 	}
 
@@ -78,6 +93,13 @@ func (r *Registry) GetScripts(category string) []ScriptEntry {
 				seen[s.Name] = true
 				result = append(result, ScriptEntry{Script: s, Source: "local"})
 			}
+		}
+	}
+
+	for _, s := range r.dynamicScripts {
+		if s.Category == category && !seen[s.Name] {
+			seen[s.Name] = true
+			result = append(result, ScriptEntry{Script: s, Source: "make"})
 		}
 	}
 
@@ -122,8 +144,25 @@ func (r *Registry) ResolveScriptPath(entry ScriptEntry) string {
 	return filepath.Join(scriptsHome, entry.Category, p)
 }
 
+// ResolveInvocation returns the executable and base args for a script entry.
+func (r *Registry) ResolveInvocation(entry ScriptEntry) (string, []string) {
+	if entry.Source == "make" {
+		target := entry.Path
+		if target == "" {
+			target = entry.Name
+		}
+		return "make", []string{target}
+	}
+	executable := r.ResolveExecutable(entry)
+	path := r.ResolveScriptPath(entry)
+	return executable, []string{path}
+}
+
 // ResolveHelpFlag returns the effective help flag: script → category → config → default.
 func (r *Registry) ResolveHelpFlag(entry ScriptEntry) string {
+	if entry.Source == "make" {
+		return ""
+	}
 	if entry.HelpFlag != "" {
 		return entry.HelpFlag
 	}
@@ -161,6 +200,55 @@ func (r *Registry) GlobalConfig() *config.Config {
 // LocalConfig returns the local config (may be nil if not found).
 func (r *Registry) LocalConfig() *config.Config {
 	return r.local
+}
+
+func (r *Registry) loadMakefileTargets() {
+	if !config.EffectiveMakefileImport(r.global) {
+		return
+	}
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		return
+	}
+	makefilePath, ok := makefile.DiscoverMakefile(cwd)
+	if !ok {
+		return
+	}
+
+	mode := makefile.ImportMode(config.EffectiveMakefileImportMode(r.global))
+	if mode != makefile.ModeIncludesOnly {
+		mode = makefile.ModeAll
+	}
+	source := makefile.ImportSource(config.EffectiveMakefileImportSource(r.global))
+	if source != makefile.SourceMakeQP {
+		source = makefile.SourceParser
+	}
+
+	targets, err := makefile.ParseTargets(makefilePath, mode, source)
+	if err != nil || len(targets) == 0 {
+		return
+	}
+
+	r.dynamicCategories = []config.Category{
+		{
+			Name:        "make",
+			Description: "Makefile targets",
+			ScriptsPath: filepath.Dir(makefilePath),
+		},
+	}
+
+	scripts := make([]config.Script, 0, len(targets))
+	for _, t := range targets {
+		scripts = append(scripts, config.Script{
+			Name:        t.Name,
+			Category:    "make",
+			Description: t.Doc,
+			Executable:  "make",
+			Path:        t.Name,
+		})
+	}
+	r.dynamicScripts = scripts
 }
 
 func (r *Registry) findCategory(name, source string) *config.Category {

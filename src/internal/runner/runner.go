@@ -36,21 +36,22 @@ func (e *RunError) Error() string {
 
 // Run executes a script, streaming stdout/stderr to the terminal.
 func Run(entry registry.ScriptEntry, args []string, reg *registry.Registry) error {
-	path := reg.ResolveScriptPath(entry)
-	executable := reg.ResolveExecutable(entry)
-	return run(executable, path, args)
+	executable, baseArgs := reg.ResolveInvocation(entry)
+	return run(executable, baseArgs, args)
 }
 
 // RunHelp executes a script with its resolved help flag.
 func RunHelp(entry registry.ScriptEntry, reg *registry.Registry) error {
-	path := reg.ResolveScriptPath(entry)
 	helpFlag := reg.ResolveHelpFlag(entry)
-	executable := reg.ResolveExecutable(entry)
-	return run(executable, path, []string{helpFlag})
+	if helpFlag == "" {
+		return nil
+	}
+	executable, baseArgs := reg.ResolveInvocation(entry)
+	return run(executable, baseArgs, []string{helpFlag})
 }
 
-func run(executable, path string, args []string) error {
-	cmd := exec.Command(executable, append([]string{path}, args...)...)
+func run(executable string, baseArgs []string, args []string) error {
+	cmd := exec.Command(executable, append(baseArgs, args...)...)
 
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -68,25 +69,23 @@ func run(executable, path string, args []string) error {
 // CaptureRun executes a script and returns its combined output as a string.
 // Used by the TUI output view.
 func CaptureRun(entry registry.ScriptEntry, args []string, reg *registry.Registry) (string, error) {
-	path := reg.ResolveScriptPath(entry)
-	executable := reg.ResolveExecutable(entry)
-	return capture(executable, path, args, nil)
+	executable, baseArgs := reg.ResolveInvocation(entry)
+	return capture(executable, baseArgs, args, nil)
 }
 
 // CaptureRunForPreview executes a script with extra env vars so gum can render
 // without a real TTY (sets TERM and COLUMNS for lipgloss/gum width detection).
 func CaptureRunForPreview(entry registry.ScriptEntry, args []string, reg *registry.Registry, width int) (string, error) {
-	path := reg.ResolveScriptPath(entry)
-	executable := reg.ResolveExecutable(entry)
+	executable, baseArgs := reg.ResolveInvocation(entry)
 	extraEnv := []string{
 		"TERM=xterm-256color",
 		fmt.Sprintf("COLUMNS=%d", width),
 	}
-	return capture(executable, path, args, extraEnv)
+	return capture(executable, baseArgs, args, extraEnv)
 }
 
-func capture(executable, path string, args []string, extraEnv []string) (string, error) {
-	cmd := exec.Command(executable, append([]string{path}, args...)...)
+func capture(executable string, baseArgs []string, args []string, extraEnv []string) (string, error) {
+	cmd := exec.Command(executable, append(baseArgs, args...)...)
 
 	if len(extraEnv) > 0 {
 		cmd.Env = append(os.Environ(), extraEnv...)
@@ -107,12 +106,11 @@ func capture(executable, path string, args []string, extraEnv []string) (string,
 // It prefers wrapping with `script` (PTY) when available so tools like gum detect
 // a terminal; otherwise it falls back to direct execution.
 func StartInteractive(entry registry.ScriptEntry, args []string, reg *registry.Registry) (*InteractiveSession, error) {
-	path := reg.ResolveScriptPath(entry)
-	executable := reg.ResolveExecutable(entry)
+	executable, baseArgs := reg.ResolveInvocation(entry)
 
 	var cmd *exec.Cmd
 	if _, err := exec.LookPath("script"); err == nil {
-		commandLine := shellJoin(append([]string{executable, path}, args...))
+		commandLine := shellJoin(append(append([]string{executable}, baseArgs...), args...))
 		if runtime.GOOS == "darwin" {
 			// BSD script: script -q /dev/null <command>
 			cmd = exec.Command("script", "-q", "/dev/null", commandLine)
@@ -121,7 +119,7 @@ func StartInteractive(entry registry.ScriptEntry, args []string, reg *registry.R
 			cmd = exec.Command("script", "-qfec", commandLine, "/dev/null")
 		}
 	} else {
-		cmd = exec.Command(executable, append([]string{path}, args...)...)
+		cmd = exec.Command(executable, append(baseArgs, args...)...)
 	}
 
 	stdin, err := cmd.StdinPipe()

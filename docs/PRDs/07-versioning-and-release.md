@@ -54,7 +54,7 @@ O instalador atual baixa o código-fonte e compila localmente.
 3. Executa `VERSION=<ref> make build`
 4. Instala binário em `STG_INSTALL_DIR` (default `~/.local/bin`)
 5. Opcionalmente:
-   - copia `shotgum-playground` para `~/shotgum-playground`
+   - copia `playground` para `~/playground`
    - instala scripts default (`defaults/scripts`) e tenta registrá-los via `stg add`
 
 ### Dependências exigidas

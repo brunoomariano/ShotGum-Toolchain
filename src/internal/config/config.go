@@ -54,6 +54,19 @@ func expandPaths(cfg *Config) {
 	}
 }
 
+func applyDefaults(cfg *Config) {
+	if cfg.MakefileImport == nil {
+		defaultEnabled := true
+		cfg.MakefileImport = &defaultEnabled
+	}
+	if cfg.MakefileImportMode == "" {
+		cfg.MakefileImportMode = "all"
+	}
+	if cfg.MakefileImportSource == "" {
+		cfg.MakefileImportSource = "parser"
+	}
+}
+
 // LoadGlobal reads ~/.config/shotgum/config.yaml.
 func LoadGlobal() (*Config, error) {
 	path := globalConfigPath()
@@ -70,6 +83,7 @@ func LoadGlobal() (*Config, error) {
 		return nil, fmt.Errorf("parsing global config: %w", err)
 	}
 	cfg.Source = "global"
+	applyDefaults(&cfg)
 	expandPaths(&cfg)
 	return &cfg, nil
 }
@@ -91,6 +105,7 @@ func LoadLocal() (*Config, error) {
 				return nil, fmt.Errorf("parsing local config %s: %w", candidate, err)
 			}
 			cfg.Source = "local"
+			applyDefaults(&cfg)
 			expandPaths(&cfg)
 			return &cfg, nil
 		}
@@ -127,11 +142,15 @@ func EnsureDefault() error {
 	scriptsHome := defaultScriptsHome()
 
 	if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
+		defaultEnabled := true
 		cfg := &Config{
-			Version:     "1",
-			ScriptsHome: "~/" + defaultScriptsDir,
-			HelpFlag:    "--help",
-			DefaultExec: "/bin/sh",
+			Version:              "1",
+			ScriptsHome:          "~/" + defaultScriptsDir,
+			HelpFlag:             "--help",
+			DefaultExec:          "/bin/sh",
+			MakefileImport:       &defaultEnabled,
+			MakefileImportMode:   "all",
+			MakefileImportSource: "parser",
 		}
 		if err := Save(cfg, cfgPath); err != nil {
 			return err
@@ -147,4 +166,28 @@ func EnsureDefault() error {
 // GlobalConfigPath returns the path to the global config file (exported for commands).
 func GlobalConfigPath() string {
 	return globalConfigPath()
+}
+
+// EffectiveMakefileImport returns the effective makefile import toggle.
+func EffectiveMakefileImport(cfg *Config) bool {
+	if cfg == nil || cfg.MakefileImport == nil {
+		return true
+	}
+	return *cfg.MakefileImport
+}
+
+// EffectiveMakefileImportMode returns the effective import mode.
+func EffectiveMakefileImportMode(cfg *Config) string {
+	if cfg == nil || cfg.MakefileImportMode == "" {
+		return "all"
+	}
+	return cfg.MakefileImportMode
+}
+
+// EffectiveMakefileImportSource returns the effective import source.
+func EffectiveMakefileImportSource(cfg *Config) string {
+	if cfg == nil || cfg.MakefileImportSource == "" {
+		return "parser"
+	}
+	return cfg.MakefileImportSource
 }

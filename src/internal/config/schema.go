@@ -3,13 +3,16 @@ package config
 // Config is the top-level structure for both global (~/.config/shotgum/config.yaml)
 // and local (.shotgum.yaml) configuration files.
 type Config struct {
-	Version     string     `yaml:"version"`
-	ScriptsHome string     `yaml:"scripts_home"`
-	HelpFlag    string     `yaml:"help_flag"` // default flag passed to scripts for help output
-	DefaultExec string     `yaml:"default_executable"`
-	Categories  []Category `yaml:"categories"`
-	Scripts     []Script   `yaml:"scripts"`
-	Source      string     `yaml:"-"` // "global" | "local" — populated at load time, not persisted
+	Version              string     `yaml:"version"`
+	ScriptsHome          string     `yaml:"scripts_home"`
+	HelpFlag             string     `yaml:"help_flag"` // default flag passed to scripts for help output
+	DefaultExec          string     `yaml:"default_executable"`
+	MakefileImport       *bool      `yaml:"makefile_import,omitempty"`
+	MakefileImportMode   string     `yaml:"makefile_import_mode,omitempty"`
+	MakefileImportSource string     `yaml:"makefile_import_source,omitempty"`
+	Categories           []Category `yaml:"categories"`
+	Scripts              []Script   `yaml:"scripts"`
+	Source               string     `yaml:"-"` // "global" | "local" — populated at load time, not persisted
 }
 
 // Category groups related scripts under a named folder.

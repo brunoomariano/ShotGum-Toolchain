@@ -34,6 +34,8 @@ func Badge(source string) string {
 	switch source {
 	case "local":
 		return LocalBadge.Render("[local]")
+	case "make":
+		return LocalBadge.Render("[makefile]")
 	default:
 		return UserBadge.Render("[user]")
 	}

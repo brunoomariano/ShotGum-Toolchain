@@ -52,11 +52,11 @@ ShotGum-Toolchain/
 │   ├── tui/
 │   │   ├── app.go     # state machine principal
 │   │   ├── styles/    # paleta e estilos lipgloss
-│   │   └── views/     # header, listas, detail, output, confirm
+│   │   └── views/     # Header/Navigation/Info containers, output, confirm
 │   └── version/       # version.Version injetada por ldflags
 ├── defaults/scripts/  # scripts padrão (star.sh, issue.sh)
 ├── docs/PRDs/
-├── shotgum-playground/
+├── playground/
 ├── .github/workflows/ci.yml
 ├── Makefile
 └── install.sh

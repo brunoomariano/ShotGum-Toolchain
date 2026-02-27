@@ -39,7 +39,7 @@ func LoadScriptHelpCmd(entry registry.ScriptEntry, reg *registry.Registry, width
 	}
 }
 
-// DetailModel renders contextual information in the right panel.
+// DetailModel renders contextual information in the Info Container (right panel).
 // The help section is contained in a scrollable viewport.
 type DetailModel struct {
 	mode       detailMode
@@ -96,6 +96,13 @@ func (m *DetailModel) SetScript(entry *registry.ScriptEntry, reg *registry.Regis
 	m.helpScript = ""
 	m.vp.SetContent("")
 	m.vp.GotoTop()
+	if entry != nil && entry.Source == "make" {
+		if entry.Description != "" {
+			m.helpText = entry.Description
+			m.helpScript = entry.Name
+			m.vp.SetContent(entry.Description)
+		}
+	}
 }
 
 // HelpText returns the cached help text for the currently shown script.
@@ -120,7 +127,7 @@ func (m DetailModel) Update(msg tea.Msg) (DetailModel, tea.Cmd) {
 	return m, cmd
 }
 
-// View renders the detail panel content (no border). w must match the last SetSize call.
+// View renders the Info Container content (no border). w must match the last SetSize call.
 func (m DetailModel) View(w int) string {
 	switch m.mode {
 	case detailCategory:
@@ -176,9 +183,13 @@ func (m DetailModel) renderScript(w int) string {
 	command := ""
 	helpFlag := "--help"
 	if m.reg != nil {
-		path = m.reg.ResolveScriptPath(*e)
-		executable = m.reg.ResolveExecutable(*e)
-		command = executable + " " + path
+		executable, baseArgs := m.reg.ResolveInvocation(*e)
+		if len(baseArgs) > 0 {
+			path = strings.Join(baseArgs, " ")
+			command = executable + " " + path
+		} else {
+			command = executable
+		}
 		helpFlag = m.reg.ResolveHelpFlag(*e)
 	}
 
@@ -188,7 +199,7 @@ func (m DetailModel) renderScript(w int) string {
 		"  " + styles.DescStyle.Render("Executable") + "  " + styles.DescStyle.Render(executable),
 		"  " + styles.DescStyle.Render("Command") + "     " + styles.DescStyle.Render(command),
 		"  " + styles.DescStyle.Render("Path") + "        " + styles.DescStyle.Render(path),
-		"  " + styles.DescStyle.Render("Help flag") + "   " + styles.DescStyle.Render(helpFlag),
+		"  " + styles.DescStyle.Render("Help flag") + "   " + styles.DescStyle.Render(displayHelpFlag(helpFlag)),
 	}, "\n")
 
 	top := strings.Join([]string{title, sep, name, desc, "", kv}, "\n")
@@ -196,7 +207,7 @@ func (m DetailModel) renderScript(w int) string {
 	// Help viewport section
 	var helpSection string
 	if m.helpText != "" && m.helpScript == e.Name {
-		helpTitle := styles.TitleStyle.Render("Help")
+		helpTitle := styles.TitleStyle.Render(helpTitleForScript(e))
 		helpSep := styles.DescStyle.Render(strings.Repeat("─", w))
 
 		// Scroll position indicator
@@ -207,9 +218,23 @@ func (m DetailModel) renderScript(w int) string {
 		}
 
 		helpSection = "\n\n" + helpTitle + "\n" + helpSep + "\n" + m.vp.View() + scrollInfo
-	} else if m.helpScript == "" {
+	} else if m.helpScript == "" && e.Source != "make" {
 		helpSection = "\n\n" + styles.DescStyle.Render("  loading help…")
 	}
 
 	return top + helpSection
+}
+
+func displayHelpFlag(helpFlag string) string {
+	if helpFlag == "" {
+		return "(disabled)"
+	}
+	return helpFlag
+}
+
+func helpTitleForScript(e *registry.ScriptEntry) string {
+	if e != nil && e.Source == "make" {
+		return "Notes"
+	}
+	return "Help"
 }

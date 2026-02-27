@@ -68,7 +68,7 @@
 |---|---|
 | R-UI-01 | `renderTwoPanel` concentra borda/estrutura dos painéis |
 | R-UI-02 | `stateOutput` tem view dedicada |
-| R-UI-03 | Foco lista/detalhe alterna por `tab` |
+| R-UI-03 | Foco Navigation/Info Container alterna por `tab` |
 | R-UI-04 | `confirm.go` está disponível, porém fora do fluxo ativo |
 
 ### R-VER

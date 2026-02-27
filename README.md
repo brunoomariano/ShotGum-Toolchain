@@ -16,7 +16,7 @@ O `stg` unifica scripts globais (usuário) e locais (projeto) em um catálogo na
 - Merge de configuração global (`~/.config/shotgum/config.yaml`) + local (`.shotgum.yaml`)
 - Execução direta: `stg <categoria> <script> [args...]`
 - Execução interativa na TUI (stream de output + input ao processo)
-- Help preview assíncrono no painel direito
+- Help preview assíncrono no Info Container
 - Cascata de `help_flag`: script -> categoria -> config -> `--help`
 - Resolução de executável com fallback (`script.executable`, `default_executable`, `/bin/sh`)
 - Badges de origem: `[local]` e `[user]`
@@ -94,7 +94,7 @@ stg --logs       # abre com footer de logs de execução
 | Scripts | `Enter` | Executa script |
 | Scripts | `i` | Executa script (mesmo fluxo de `Enter`) |
 | Scripts | `?` | Executa script com `help_flag` resolvido |
-| Scripts | `tab` | Foca painel de detalhe |
+| Scripts | `tab` | Foca Info Container |
 | Scripts | `esc` | Volta para categorias |
 | Saída | `↑` `↓` `PgUp` `PgDn` | Scroll |
 | Saída | `esc` | Volta para scripts (quando não estiver carregando) |
@@ -200,7 +200,7 @@ internal/
   runner/         # execução direta/capturada/interativa
   tui/
     app.go        # state machine BubbleTea
-    views/        # header, lists, detail, output, confirm
+    views/        # Header/Navigation/Info containers, output, confirm
     styles/       # estilos lipgloss
   version/        # version.Version (ldflags)
 ```
