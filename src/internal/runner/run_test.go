@@ -47,7 +47,7 @@ func TestRun_Script_Success(t *testing.T) {
 	script := writeScript(t, tmpdir, "run.sh", "#!/bin/bash\necho run-success")
 
 	captureTerminalOutput(func() {
-		err := run("/bin/sh", script, nil)
+		err := run("/bin/sh", []string{script}, nil)
 		if err != nil {
 			t.Errorf("run() error: %v", err)
 		}
@@ -59,7 +59,7 @@ func TestRun_Executable_Success(t *testing.T) {
 	script := writeScript(t, tmpdir, "echo.sh", "#!/bin/bash\necho run-exec-ok")
 
 	captureTerminalOutput(func() {
-		err := run("/bin/sh", script, nil)
+		err := run("/bin/sh", []string{script}, nil)
 		if err != nil {
 			t.Errorf("run() error: %v", err)
 		}
@@ -72,7 +72,7 @@ func TestRun_Script_ExitError(t *testing.T) {
 
 	var runErr *RunError
 	captureTerminalOutput(func() {
-		err := run("/bin/sh", script, nil)
+		err := run("/bin/sh", []string{script}, nil)
 		if err == nil {
 			t.Error("run() should return error for non-zero exit")
 			return
@@ -88,7 +88,7 @@ func TestRun_Script_ExitError(t *testing.T) {
 
 func TestRun_Script_NotFound(t *testing.T) {
 	captureTerminalOutput(func() {
-		err := run("/bin/sh", "/nonexistent/script.sh", nil)
+		err := run("/bin/sh", []string{"/nonexistent/script.sh"}, nil)
 		if err == nil {
 			t.Error("run() should return error for nonexistent script")
 		}

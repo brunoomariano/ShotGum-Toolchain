@@ -22,39 +22,55 @@ var knownSubcommands = map[string]bool{
 }
 
 func main() {
-	args := os.Args[1:]
+	os.Exit(run(os.Args[1:]))
+}
+
+func run(args []string) int {
 
 	// If we have at least 2 args where the first two are non-flag words not
 	// matching known subcommands, treat as: stg <category> <script> [extra-args...]
 	// This lets all extra flags (including --foo) pass through to the script.
-	if len(args) >= 2 &&
-		!strings.HasPrefix(args[0], "-") &&
-		!strings.HasPrefix(args[1], "-") &&
-		!knownSubcommands[args[0]] {
+	if isDirectRun(args) {
 
 		reg, err := registry.Load()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error loading registry: %v\n", err)
-			os.Exit(1)
+			return 1
 		}
 
 		entry, err := reg.FindScript(args[0], args[1])
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return 1
 		}
 
 		if err := runner.Run(*entry, args[2:], reg); err != nil {
 			if runErr, ok := err.(*runner.RunError); ok {
-				os.Exit(runErr.ExitCode)
+				return runErr.ExitCode
 			}
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			return 1
 		}
-		return
+		return 0
 	}
 
-	if err := commands.Root().Execute(); err != nil {
-		os.Exit(1)
+	cmd := commands.Root()
+	cmd.SetArgs(args)
+	if err := cmd.Execute(); err != nil {
+		return 1
 	}
+	return 0
+}
+
+func isDirectRun(args []string) bool {
+	if len(args) < 2 {
+		return false
+	}
+	if strings.HasPrefix(args[0], "-") || strings.HasPrefix(args[1], "-") {
+		return false
+	}
+	if knownSubcommands[args[0]] {
+		return false
+	}
+	return true
 }

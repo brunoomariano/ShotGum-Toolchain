@@ -58,9 +58,9 @@ func TestPanelDims_NormalWindow(t *testing.T) {
 	if panelH < 5 {
 		t.Errorf("panelH = %d, want >= 5", panelH)
 	}
-	// leftW + rightW should equal width-4
-	if leftW+rightW != 100-4 {
-		t.Errorf("leftW+rightW = %d, want %d", leftW+rightW, 100-4)
+	// leftW + rightW should equal width
+	if leftW+rightW != 100 {
+		t.Errorf("leftW+rightW = %d, want %d", leftW+rightW, 100)
 	}
 }
 
@@ -118,6 +118,191 @@ func TestAppModel_Init(t *testing.T) {
 	reg := loadTestReg(t, nil)
 	m, _ := NewAppModel(reg)
 	_ = m.Init() // should not panic; returns header.Init() which is nil
+}
+
+// ── Settings ───────────────────────────────────────────────────────────────
+
+func TestAppModel_Settings_ToggleMakefileImport(t *testing.T) {
+	reg := loadTestReg(t, nil)
+	m := appWithSize(t, reg, 120, 40)
+
+	m2i, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	m2 := m2i.(AppModel)
+	if m2.state != stateSettings {
+		t.Fatalf("state = %d, want stateSettings", m2.state)
+	}
+
+	m3i, _ := m2.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m3 := m3i.(AppModel)
+	if m3.state != stateCategories {
+		t.Fatalf("state = %d, want stateCategories after toggle", m3.state)
+	}
+
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		t.Fatalf("LoadGlobal() error: %v", err)
+	}
+	if cfg == nil || cfg.MakefileImport == nil || *cfg.MakefileImport {
+		t.Errorf("MakefileImport = %v, want false", cfg.MakefileImport)
+	}
+}
+
+func TestAppModel_Settings_ToggleMakefileSource(t *testing.T) {
+	reg := loadTestReg(t, nil)
+	m := appWithSize(t, reg, 120, 40)
+
+	m2i, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	m2 := m2i.(AppModel)
+	m2i, _ = m2.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m2 = m2i.(AppModel)
+
+	m3i, _ := m2.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	_ = m3i.(AppModel)
+
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		t.Fatalf("LoadGlobal() error: %v", err)
+	}
+	if cfg == nil || cfg.MakefileImportSource != "make_qp" {
+		t.Errorf("MakefileImportSource = %q, want make_qp", cfg.MakefileImportSource)
+	}
+}
+
+func TestAppModel_Settings_ToggleMakefileMode(t *testing.T) {
+	reg := loadTestReg(t, nil)
+	m := appWithSize(t, reg, 120, 40)
+
+	m2i, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	m2 := m2i.(AppModel)
+	m2i, _ = m2.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m2 = m2i.(AppModel)
+	m2i, _ = m2.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m2 = m2i.(AppModel)
+
+	m3i, _ := m2.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	_ = m3i.(AppModel)
+
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		t.Fatalf("LoadGlobal() error: %v", err)
+	}
+	if cfg == nil || cfg.MakefileImportMode != "includes_only" {
+		t.Errorf("MakefileImportMode = %q, want includes_only", cfg.MakefileImportMode)
+	}
+}
+
+func TestAppModel_Settings_RenderDetail(t *testing.T) {
+	reg := loadTestReg(t, nil)
+	m := appWithSize(t, reg, 120, 40)
+
+	m2i, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	m2 := m2i.(AppModel)
+	if m2.state != stateSettings {
+		t.Fatalf("state = %d, want stateSettings", m2.state)
+	}
+
+	detail := m2.renderSettingsDetail()
+	if !strings.Contains(detail, "Auto-import Makefile targets") {
+		t.Errorf("renderSettingsDetail() should include item title, got: %q", detail)
+	}
+}
+
+func TestAppModel_RenderTwoPanelWithRight_NotEmpty(t *testing.T) {
+	reg := loadTestReg(t, nil)
+	m := appWithSize(t, reg, 120, 40)
+	view := m.renderTwoPanelWithRight("left", "right", "help")
+	if strings.TrimSpace(view) == "" {
+		t.Error("renderTwoPanelWithRight() should not be empty")
+	}
+}
+
+func TestAppModel_Settings_Esc_ReturnsCategories(t *testing.T) {
+	reg := loadTestReg(t, nil)
+	m := appWithSize(t, reg, 120, 40)
+
+	m2i, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	m2 := m2i.(AppModel)
+	if m2.state != stateSettings {
+		t.Fatalf("state = %d, want stateSettings", m2.state)
+	}
+
+	m3i, _ := m2.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m3 := m3i.(AppModel)
+	if m3.state != stateCategories {
+		t.Fatalf("state = %d, want stateCategories", m3.state)
+	}
+}
+
+func TestAppModel_Settings_Q_QuitCmd(t *testing.T) {
+	reg := loadTestReg(t, nil)
+	m := appWithSize(t, reg, 120, 40)
+
+	m2i, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	m2 := m2i.(AppModel)
+	if m2.state != stateSettings {
+		t.Fatalf("state = %d, want stateSettings", m2.state)
+	}
+
+	_, cmd := m2.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	if cmd == nil {
+		t.Error("q in settings should return quit cmd")
+	}
+}
+
+func TestAppModel_RenderSettingsDetail_NoItem(t *testing.T) {
+	reg := loadTestReg(t, nil)
+	m := appWithSize(t, reg, 120, 40)
+	m.settingsList = views.NewSettingsList(nil, 80, 20)
+
+	detail := m.renderSettingsDetail()
+	if !strings.Contains(detail, "Select a setting") {
+		t.Errorf("renderSettingsDetail() should show fallback, got: %q", detail)
+	}
+}
+
+func TestAppModel_ExecutionLogsFooter_RendersError(t *testing.T) {
+	reg := loadTestReg(t, nil)
+	m := appWithSize(t, reg, 80, 24)
+	m.SetExecutionLogsVisible(true)
+	m.appendExecutionLog("ERROR", "boom")
+	view := m.renderExecutionLogsFooter()
+	if !strings.Contains(view, "ERROR") {
+		t.Errorf("footer should contain ERROR entry, got: %q", view)
+	}
+}
+
+func TestAppModel_ExecutionLogsFooter_Trims(t *testing.T) {
+	reg := loadTestReg(t, nil)
+	m := appWithSize(t, reg, 80, 24)
+	m.SetExecutionLogsVisible(true)
+	for i := 0; i < executionLogWindowLines+5; i++ {
+		m.appendExecutionLog("INFO", "line")
+	}
+	view := m.renderExecutionLogsFooter()
+	if strings.Count(view, "\n") < executionLogWindowLines {
+		t.Errorf("footer should render at least %d lines, got: %q", executionLogWindowLines, view)
+	}
+}
+
+func TestAppModel_AppendExecutionLog_IgnoresEmpty(t *testing.T) {
+	reg := loadTestReg(t, nil)
+	m := appWithSize(t, reg, 80, 24)
+	m.appendExecutionLog("INFO", " ")
+	if len(m.executionLogs) != 0 {
+		t.Errorf("expected no logs, got %d", len(m.executionLogs))
+	}
+}
+
+func TestAppModel_Output_Esc_Loading_NoChange(t *testing.T) {
+	reg := loadTestReg(t, nil)
+	m := appWithSize(t, reg, 80, 24)
+	m.state = stateOutput
+	m.output = views.NewOutputModel("test", 80, 24) // loading=true
+	m2i, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m2 := m2i.(AppModel)
+	if m2.state != stateOutput {
+		t.Errorf("Esc while loading should stay in stateOutput, got %d", m2.state)
+	}
 }
 
 // ── Update: WindowSizeMsg ──────────────────────────────────────────────────
@@ -261,6 +446,24 @@ func TestAppModel_Categories_OtherKey(t *testing.T) {
 	m2 := m2i.(AppModel)
 	if m2.state != stateCategories {
 		t.Error("arrow key should stay in stateCategories")
+	}
+}
+
+func TestAppModel_Categories_SkipSectionHeader_Down(t *testing.T) {
+	cfg := &config.Config{
+		Version: "1",
+		Categories: []config.Category{
+			{Name: "tools"},
+		},
+	}
+	reg := loadTestReg(t, cfg)
+	m := appWithSize(t, reg, 80, 24)
+	m.catList.Select(0) // force header selection
+
+	m2i, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m2 := m2i.(AppModel)
+	if _, ok := m2.catList.SelectedItem().(views.SectionHeaderItem); ok {
+		t.Error("cursor should skip section header")
 	}
 }
 
@@ -430,6 +633,20 @@ func TestAppModel_Scripts_Help_WithItem(t *testing.T) {
 	}
 }
 
+func TestAppModel_Scripts_Help_MakeTarget_NoCmd(t *testing.T) {
+	reg := loadTestReg(t, nil)
+	m := appWithSize(t, reg, 80, 24)
+	m.state = stateScripts
+	m.scriptList = views.NewScriptList("make", []registry.ScriptEntry{
+		{Script: config.Script{Name: "build", Category: "make"}, Source: "make"},
+	}, 80, 20)
+
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	if cmd != nil {
+		t.Error("'?' on make target should not return a cmd")
+	}
+}
+
 func TestAppModel_Scripts_OtherKey(t *testing.T) {
 	reg := loadTestReg(t, nil)
 	m, _ := NewAppModel(reg)
@@ -438,6 +655,26 @@ func TestAppModel_Scripts_OtherKey(t *testing.T) {
 	m2 := m2i.(AppModel)
 	if m2.state != stateScripts {
 		t.Error("arrow key should stay in stateScripts")
+	}
+}
+
+func TestAppModel_Scripts_SkipSectionHeader_Down(t *testing.T) {
+	cfg := &config.Config{
+		Version:    "1",
+		Categories: []config.Category{{Name: "tools"}},
+		Scripts:    []config.Script{{Name: "build", Category: "tools", Executable: "/bin/sh", Path: "/dev/null"}},
+	}
+	reg := loadTestReg(t, cfg)
+	m := appWithSize(t, reg, 80, 24)
+	m.state = stateScripts
+	scripts := reg.GetScripts("tools")
+	m.scriptList = views.NewScriptList("tools", scripts, 80, 20)
+	m.scriptList.Select(0) // force header selection
+
+	m2i, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m2 := m2i.(AppModel)
+	if _, ok := m2.scriptList.SelectedItem().(views.SectionHeaderItem); ok {
+		t.Error("cursor should skip section header")
 	}
 }
 
@@ -509,6 +746,18 @@ func TestAppModel_Output_OtherKey(t *testing.T) {
 	m.output = views.NewOutputModel("test", 80, 24)
 	m2i, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	_ = m2i // should not panic
+}
+
+func TestAppModel_Output_S_KeyIgnored(t *testing.T) {
+	reg := loadTestReg(t, nil)
+	m, _ := NewAppModel(reg)
+	m.state = stateOutput
+	m.output = views.NewOutputModel("test", 80, 24)
+	m2i, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	m2 := m2i.(AppModel)
+	if m2.state != stateOutput {
+		t.Errorf("state = %d, want stateOutput", m2.state)
+	}
 }
 
 // ── View ───────────────────────────────────────────────────────────────────

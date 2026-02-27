@@ -37,7 +37,7 @@ func TestHeaderModel_Init(t *testing.T) {
 	h := NewHeaderModel()
 	cmd := h.Init()
 	if cmd != nil {
-		t.Error("Init() should return nil")
+		t.Error("Init() should return nil (no animation)")
 	}
 }
 
@@ -57,11 +57,11 @@ func TestHeaderModel_View_ContainsMetadata(t *testing.T) {
 	if !strings.Contains(stripped, "Script Manager") {
 		t.Errorf("View() should contain 'Script Manager': %q", stripped)
 	}
-	if !strings.Contains(stripped, "0.3.0") {
+	if !strings.Contains(stripped, "v0.3.0") {
 		t.Errorf("View() should contain version 0.3.0: %q", stripped)
 	}
-	if !strings.Contains(stripped, "https://github.com/brunoomariano/ShotGum-Toolchain") {
-		t.Errorf("View() should contain repo URL: %q", stripped)
+	if strings.Contains(stripped, "https://github.com/brunoomariano/ShotGum-Toolchain") {
+		t.Errorf("View() should not contain repo URL: %q", stripped)
 	}
 }
 
