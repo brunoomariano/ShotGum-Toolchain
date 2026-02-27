@@ -32,6 +32,28 @@ need() {
   command -v "$1" &>/dev/null || die "Required tool not found: $1"
 }
 
+ensure_linux_debian_ubuntu() {
+  local uname_s=""
+  uname_s="$(uname -s 2>/dev/null || true)"
+  [[ "$uname_s" == "Linux" ]] || die "Linux only (Debian/Ubuntu)."
+
+  [[ -f /etc/os-release ]] || die "Could not detect distro (missing /etc/os-release)."
+  # shellcheck disable=SC1091
+  . /etc/os-release
+
+  case "${ID:-}" in
+    debian|ubuntu)
+      return 0
+      ;;
+  esac
+
+  if [[ "${ID_LIKE:-}" == *debian* ]]; then
+    return 0
+  fi
+
+  die "Unsupported distro: ${ID:-unknown}. Supported: Debian/Ubuntu."
+}
+
 # ── Interactive prompt (works with curl | bash) ─────────────────────────────
 
 ask_tty() {
@@ -108,10 +130,10 @@ build_and_install() {
 # ── Optional extras from downloaded source ────────────────────────────────────
 
 install_playground_from_source() {
-  local dest="$HOME/shotgum-playground"
-  local src="$SOURCE_DIR/shotgum-playground"
+  local dest="$HOME/playground"
+  local src="$SOURCE_DIR/playground"
 
-  [[ -d "$src" ]] || { warn "shotgum-playground not found in downloaded source."; return 1; }
+  [[ -d "$src" ]] || { warn "playground not found in downloaded source."; return 1; }
 
   if [[ -d "$dest" ]]; then
     warn "Directory already exists: $dest — skipping copy."
@@ -123,7 +145,7 @@ install_playground_from_source() {
   ok "Playground ready → $dest"
   printf "\n"
   dim "  Explore it:"
-  dim "    cd ~/shotgum-playground"
+  dim "    cd ~/playground"
   dim "    stg"
 }
 
@@ -193,6 +215,36 @@ install_defaults_from_source() {
   dim "  Or run directly: stg shotgum star"
 }
 
+remove_defaults_from_source() {
+  local scripts_dir="$HOME/.shotgum/scripts/shotgum"
+
+  step "Removing default project scripts..."
+
+  local removed_any=0
+  for name in star issue; do
+    local dest="$scripts_dir/${name}.sh"
+    if [[ -f "$dest" ]]; then
+      rm -f "$dest"
+      ok "  Removed: $dest"
+      removed_any=1
+    else
+      dim "  Not found: $dest"
+    fi
+  done
+
+  if [[ "$removed_any" -eq 0 ]]; then
+    warn "No default scripts found. Nothing to remove."
+    return 0
+  fi
+
+  if [[ -d "$scripts_dir" && -z "$(ls -A "$scripts_dir" 2>/dev/null)" ]]; then
+    rmdir "$scripts_dir" 2>/dev/null || true
+    ok "  Removed empty directory: $scripts_dir"
+  fi
+
+  warn "If scripts still appear in stg, remove entries from ~/.config/shotgum/config.yaml."
+}
+
 # ── Install ───────────────────────────────────────────────────────────────────
 
 main() {
@@ -203,6 +255,7 @@ main() {
   need tar
   need make
   need go
+  ensure_linux_debian_ubuntu
 
   step "Source ref: $REF"
 
@@ -226,16 +279,19 @@ main() {
   fi
 
   printf "\n"
+  install_defaults_from_source
+
+  printf "\n"
   printf "  ${BOLD}Optional extras${RESET}\n"
 
-  if ask_tty "Copy shotgum-playground from source to ~/shotgum-playground and test stg?"; then
+  if ask_tty "Copy playground from source to ~/playground and test stg?"; then
     printf "\n"
     install_playground_from_source
   fi
 
-  if ask_tty "Install default project scripts in your user folder? (shotgum/star + shotgum/issue)"; then
+  if ask_tty "Remove default project scripts from your user folder? (shotgum/star + shotgum/issue)"; then
     printf "\n"
-    install_defaults_from_source
+    remove_defaults_from_source
   fi
 
   printf "\n"

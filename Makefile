@@ -6,6 +6,13 @@ GO       := go
 GOFLAGS  :=
 SRC      := src
 BUILDDIR := build
+UNAME_S  := $(shell uname -s)
+
+ifeq ($(UNAME_S),Linux)
+	IS_LINUX := true
+else
+	IS_LINUX := false
+endif
 
 # Read version directly from internal/version/version.go (single source of truth).
 VERSION := $(shell sed -n 's/^const DefaultVersion = "\(.*\)"/\1/p' $(SRC)/internal/version/version.go | head -n1)
@@ -17,19 +24,20 @@ COVERAGE_OUT := coverage.out
 .PHONY: build run snapshot clean tidy fmt vet lint install uninstall test cover ci help
 
 build: ## Build the binary into ./build/
+	@if [ "$(IS_LINUX)" != "true" ]; then echo "  ✗ Linux only (Debian/Ubuntu)."; exit 1; fi
 	@mkdir -p $(CURDIR)/$(BUILDDIR)
 	$(GO) -C $(SRC) build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(CURDIR)/$(BUILDDIR)/$(BINARY) $(CMD)
 
 run: build ## Build and run the TUI
 	./$(BUILDDIR)/$(BINARY)
 
-snapshot: ## Build release binaries for all platforms into ./dist
+snapshot: ## Build release binaries for Linux only into ./dist
+	@if [ "$(IS_LINUX)" != "true" ]; then echo "  ✗ Linux only (Debian/Ubuntu)."; exit 1; fi
 	@mkdir -p $(CURDIR)/dist
-	@for platform in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do \
+	@for platform in linux/amd64 linux/arm64; do \
 		os=$$(echo $$platform | cut -d/ -f1); \
 		arch=$$(echo $$platform | cut -d/ -f2); \
-		ext=$$([ "$$os" = "windows" ] && echo ".exe" || echo ""); \
-		out="$(CURDIR)/dist/$(BINARY)-$$os-$$arch$$ext"; \
+		out="$(CURDIR)/dist/$(BINARY)-$$os-$$arch"; \
 		printf "  → $$out\n"; \
 		GOOS=$$os GOARCH=$$arch $(GO) -C $(SRC) build \
 			-ldflags="$(LDFLAGS)" \
